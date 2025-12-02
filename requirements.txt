@@ -11,3 +11,7 @@ seaborn>=0.11.0
 
 # Utilities
 tqdm>=4.62.0
+
+# Image processing
+Pillow>=10.0.0
+pillow-avif-plugin>=1.4.3
