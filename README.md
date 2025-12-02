@@ -335,13 +335,7 @@ This project is for educational purposes as part of the Programming for ML cours
 
 ## Authors
 
-Team: [Your Team Name]
+Team: The Pynacle Group
 Course: Programming for Machine Learning
 Institution: IIT Bombay
 
-## References
-
-- Local Binary Patterns: Ojala et al., 2002
-- HOG Features: Dalal & Triggs, 2005
-- Gabor Filters: Daugman, 1985
-- GLCM: Haralick et al., 1973
