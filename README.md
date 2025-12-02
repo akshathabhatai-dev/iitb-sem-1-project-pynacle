@@ -329,13 +329,187 @@ python hsv_features.py
 # etc.
 ```
 
-## License
+
+---
+
+# Image Crop & Scale Tool
+
+A command-line Python tool that:
+
+* Detects real image formats (JPEG/PNG/WEBP/GIF/BMP/AVIF/HEIC)
+* Converts **AVIF/HEIC → PNG**
+* Crops images to **4:3 aspect ratio** (center crop)
+* Resizes them to **800 × 600 pixels**
+* Saves results into a new **scaled/** directory
+* Preserves original format for all other image types
+
+---
+
+## 🚀 Features
+
+### ✔ Format Detection (Magic Number Based)
+
+Works even when files have incorrect extensions.
+
+### ✔ AVIF/HEIC Support
+
+`pillow-avif-plugin` enables Pillow to decode AVIF & HEIC files.
+
+### ✔ Intelligent Cropping
+
+Images are center-cropped to **4:3** without distortion.
+
+### ✔ Scaling
+
+All cropped images are resized to **800×600** using high-quality LANCZOS filtering.
+
+### ✔ Output Structure
+
+Images are written to a new directory:
+
+```
+scaled/
+```
+
+Maintains original file extensions, except:
+
+* **AVIF → PNG**
+
+### ✔ Safe Processing
+
+* Skips non-image files
+* Handles corrupted/truncated images
+* Converts modes safely (e.g., RGBA → RGB for JPG)
+
+---
+
+## 📦 Requirements
+
+Create a `requirements.txt` with:
+
+```
+Pillow>=10.0.0
+pillow-avif-plugin>=1.4.3
+```
+
+Install:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 📁 Project Structure
+
+```
+image_scaler.py
+requirements.txt
+README.md
+filtered/             ← Input folder (example)
+scaled/               ← Output folder (auto-created)
+```
+
+---
+
+## 🛠 Usage (Command Line)
+
+### Basic usage:
+
+```bash
+python image_scaler.py filtered
+```
+
+### With a custom output folder:
+
+```bash
+python image_scaler.py filtered --output final_scaled
+```
+
+or shorter:
+
+```bash
+python image_scaler.py filtered -o final_scaled
+```
+
+---
+
+## 📝 Script Behavior
+
+### 🖼 Supported Formats (input)
+
+| Format     | Supported | Notes                                    |
+| ---------- | --------- | ---------------------------------------- |
+| JPG / JPEG | ✔         | Preserved as JPG                         |
+| PNG        | ✔         | Preserved as PNG (supports transparency) |
+| WEBP       | ✔         | Preserved as WEBP                        |
+| GIF        | ✔         | Static frame saved                       |
+| BMP        | ✔         | Preserved as BMP                         |
+| AVIF       | ✔         | Converted to PNG                         |
+| HEIC/HEIF  | ✔         | Converted to PNG                         |
+
+---
+
+## 🔧 Processing Steps
+
+For each image:
+
+1. Detects real file format via signature
+2. Opens image with Pillow
+3. Converts mode (RGB/RGBA) if needed
+4. Performs a **center crop** to 4:3
+5. Resizes image to **800 × 600**
+6. Saves into **scaled/** (or specified output directory)
+
+---
+
+## 🧪 Example
+
+Input folder:
+
+```
+filtered/
+    img1.jpg
+    img2.png
+    img3.avif
+    doc.txt
+```
+
+After running:
+
+```
+scaled/
+    img1.jpg         ← cropped & scaled
+    img2.png         ← cropped & scaled
+    img3.png         ← AVIF → PNG → cropped & scaled
+```
+
+Non-image file (`doc.txt`) is skipped.
+
+---
+
+## 🧩 Troubleshooting
+
+### ❌ “Cannot write mode RGBA as JPEG”
+
+Occurs when PNG/WEBP has transparency —
+script auto-converts RGBA → RGB for JPG formats.
+
+### ❌ Pillow cannot open some images
+
+They may be corrupted or not real images.
+These are automatically skipped.
+
+---
+
+## 📜 License
 
 This project is for educational purposes as part of the Programming for ML course.
+
+---
 
 ## Authors
 
 Team: The Pynacle Group
 Course: Programming for Machine Learning
 Institution: IIT Bombay
-
