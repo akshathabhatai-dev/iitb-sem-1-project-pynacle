@@ -76,12 +76,13 @@ python -c "import cv2, numpy, sklearn, skimage; print('All dependencies installe
 
 ### 1. Annotate Images
 
-Use the annotation tool to label grid cells in your images:
+Use the annotation tool to label grid cells in your images (0=no object, 1=ball, 2=bat, 3=stump):
 
 ```bash
-cd src/data_prep
-python annotator.py --image_dir ../../dataset/train/images --output_csv ../../dataset/train/labels/labels.csv
+python src/data_prep/annotator.py --image_dir dataset/train/images --output_csv dataset/train/labels/labels.csv
 ```
+
+**Expected Output:** `dataset/train/labels/labels.csv` with format: `ImageFileName,c01,c02,...,c64`
 
 **Controls:**
 - Click cells to label them
@@ -109,16 +110,19 @@ python main_pipeline.py --mode full --tune --visualize
 ```bash
 python main_pipeline.py --mode extract
 ```
+**Expected Output:** `outputs/X_train.npy`, `outputs/y_train.npy`, `outputs/X_test.npy`, `outputs/y_test.npy`
 
-**Train model only:**
+**Train model only (with hyperparameter tuning):**
 ```bash
 python main_pipeline.py --mode train --tune
 ```
+**Expected Output:** `models/cricket_model.pkl` (trained Random Forest model with optimal hyperparameters)
 
 **Evaluate model:**
 ```bash
 python main_pipeline.py --mode evaluate
 ```
+**Expected Output:** `outputs/metrics.txt`, `outputs/confusion_matrix.png`
 
 **Generate predictions:**
 ```bash
@@ -127,6 +131,13 @@ python main_pipeline.py --mode predict
 # With visualization
 python main_pipeline.py --mode predict --visualize
 ```
+**Expected Output:** `outputs/predictions.csv` (format: `ImageFileName,TrainOrTest,c01,...,c64`)
+
+**Predict with custom paths and visualization:**
+```bash
+python main_pipeline.py --mode predict --model_path models/cricket_model.pkl --test_images dataset/test/images --output_dir outputs/test --visualize --viz_output_dir outputs/test/visualizations
+```
+**Expected Output:** `outputs/test/predictions.csv` + `outputs/test/visualizations/*.png` (color-coded grids)
 
 ### 4. Custom Paths
 
