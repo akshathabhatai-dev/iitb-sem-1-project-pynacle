@@ -253,10 +253,9 @@ Each grid cell is colored based on its predicted class:
 
 | Class | Object | Color | BGR Value |
 |-------|--------|-------|-----------|
-| 0 | No Object | Light Gray | `(240, 240, 240)` |
-| 1 | Ball | Light Green | `(144, 238, 144)` |
-| 2 | Bat | Light Coral/Salmon | `(173, 216, 230)` |
-| 3 | Stump | Light Blue | `(255, 182, 193)` |
+| 1 | Ball | Green | `(0, 255, 0)` |
+| 2 | Bat | Red | `(0, 0, 255)` |
+| 3 | Stump | Blue | `(255, 0, 0)` |
 
 ### Output
 
@@ -288,16 +287,6 @@ The pipeline uses **Random Forest Classifier** with:
 **Training Time:**
 - Without tuning: ~2-5 minutes (70 images)
 - With tuning: ~15-30 minutes (70 images)
-
-## Expected Performance
-
-| Metric | Target |
-|--------|--------|
-| Overall Accuracy | 75-85% |
-| Ball Recall | >85% |
-| Bat Recall | >75% |
-| Stump Recall | >70% |
-| No-Object Precision | >85% |
 
 ## Troubleshooting
 
