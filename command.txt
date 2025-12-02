@@ -1,0 +1,27 @@
+1. Install Dependencies
+   Install all required Python packages from requirements.txt
+pip install -r requirements.txt
+
+2. Verify Installation
+   Check if all dependencies (cv2, numpy, sklearn, skimage) are installed correctly
+python -c "import cv2, numpy, sklearn, skimage; print('All dependencies installed!')"
+
+3. Annotate Training Images
+   Interactive tool to label grid cells (0=no object, 1=ball, 2=bat, 3=stump) in training images
+python src/data_prep/annotator.py --image_dir dataset/train/images --output_csv dataset/train/labels/labels.csv
+   Expected Output: dataset/train/labels/labels.csv with format: ImageFileName,c01,c02,...,c64
+
+4. Extract Features
+   Extract 88 hand-crafted features (RGB, HSV, LBP, HOG, Gabor, GLCM) from annotated images
+python main_pipeline.py --mode extract
+   Expected Output: outputs/X_train.npy, outputs/y_train.npy, outputs/X_test.npy, outputs/y_test.npy
+
+5. Train Model with Hyperparameter Tuning
+   Train Random Forest classifier with GridSearchCV for optimal hyperparameters
+python main_pipeline.py --mode train --tune
+   Expected Output: models/cricket_model.pkl (trained Random Forest model with optimal hyperparameters)
+
+6. Predict with Visualization
+   Generate predictions on test images with color-coded grid overlay visualizations
+python main_pipeline.py --mode predict --model_path models/cricket_model.pkl --test_images dataset/test/images --output_dir outputs/test --visualize --viz_output_dir outputs/test/visualizations
+   Expected Output: outputs/test/predictions.csv (ImageFileName,TrainOrTest,c01,...,c64) + outputs/test/visualizations/*.png (color-coded grids)
