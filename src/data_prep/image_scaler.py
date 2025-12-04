@@ -71,6 +71,11 @@ def process_folder(input_folder, scaled_folder="scaled"):
             img = Image.open(in_path)
             img.load()
 
+            # Reject images smaller than 800x600
+            if img.width < 800 or img.height < 600:
+                print(f"❌ Skipped (too small): {fname} — {img.width}x{img.height}")
+                continue
+
             # Convert mode safely
             if img.mode not in ("RGB", "RGBA", "L"):
                 img = img.convert("RGB")
