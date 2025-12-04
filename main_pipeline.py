@@ -65,6 +65,7 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
     X_list = []
     y_list = []
     image_names_list = []
+    cell_index_list = []
 
     # Create a mapping of image names to labels
     labels_dict = {}
@@ -93,11 +94,28 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             X_list.append(features)
             y_list.append(label)
             image_names_list.append(img_name)
+            cell_index_list.append(cell_idx)
+    # Create DataFrame for easier analysis
 
+    feature_columns = (
+        [f"rgb_{i}" for i in range(14)] +
+        [f"hsv_{i}" for i in range(14)] +
+        [f"lbp_{i}" for i in range(10)] +
+        [f"hog_{i}" for i in range(20)] +
+        [f"gabor_{i}" for i in range(20)] +
+        [f"glcm_{i}" for i in range(10)]
+    )
+
+    columns = ["image_name", "cell_index", 'label'] + feature_columns
+    df = pd.DataFrame(X_list, columns=feature_columns)
+    df['label'] = y_list
+    df['image_name'] = image_names_list
+    df['cell_index'] = cell_index_list
+    df = df[columns]
     X = np.array(X_list, dtype=np.float32)
     y = np.array(y_list, dtype=np.int32)
 
-    return X, y, image_names_list
+    return X, y, image_names_list, df
 
 
 def main():
@@ -149,12 +167,13 @@ def main():
         print(f"Found {len(train_images)} training images")
 
         # Extract features
-        X_train, y_train, _ = extract_features_and_labels(train_images, train_labels_df)
+        X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df)
 
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
 
         # Save features
+        train_df.to_csv(output_dir / 'train_features.csv', index=False)
         np.save(output_dir / 'X_train.npy', X_train)
         np.save(output_dir / 'y_train.npy', y_train)
         print(f"Saved training features to {output_dir}")
@@ -167,12 +186,13 @@ def main():
 
             print(f"Found {len(test_images)} test images")
 
-            X_test, y_test, _ = extract_features_and_labels(test_images, test_labels_df)
+            X_test, y_test, _, test_df = extract_features_and_labels(test_images, test_labels_df)
 
             print(f"Extracted features: X_test shape = {X_test.shape}")
 
             np.save(output_dir / 'X_test.npy', X_test)
             np.save(output_dir / 'y_test.npy', y_test)
+            test_df.to_csv(output_dir / 'test_features.csv', index=False)
             print(f"Saved test features to {output_dir}")
 
     # Load features if not in extract mode
