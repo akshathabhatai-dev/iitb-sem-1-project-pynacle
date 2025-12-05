@@ -20,6 +20,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 from grid_utils import divide_into_grid, validate_image_size, resize_image
 from feature_extractor import extract_features_from_cell
 from train import train_random_forest, save_model
+from train_compare_models import compare_models, select_best_model, save_comparison_results
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
 
@@ -139,10 +140,14 @@ def main():
                        help='Directory for outputs')
     parser.add_argument('--tune', action='store_true',
                        help='Perform hyperparameter tuning (slower)')
+    parser.add_argument('--compare_models', action='store_true',
+                       help='Compare all 5 models and select best (slower)')
+    parser.add_argument('--model_type', type=str,
+                       choices=['logistic', 'rf', 'svm', 'knn', 'xgboost', 'auto'],
+                       default='auto',
+                       help='Model type to use (auto=best from comparison, rf=Random Forest only)')
     parser.add_argument('--visualize', action='store_true',
-                       help='Generate color-coded grid visualizations for test images')
-    parser.add_argument('--viz_output_dir', type=str, default='outputs/visualizations',
-                       help='Directory for visualization outputs')
+                       help='Generate color-coded grid visualizations for train and test images')
 
     args = parser.parse_args()
 
@@ -208,13 +213,57 @@ def main():
         print("\n[2/4] MODEL TRAINING")
         print("-"*70)
 
-        model = train_random_forest(
-            X_train, y_train,
-            tune_hyperparameters=args.tune,
-            verbose=True
-        )
+        if args.compare_models:
+            # Compare all 5 models and select best
+            print("Model comparison mode enabled - training all 5 models...")
+            comparison_results = compare_models(
+                X_train, y_train,
+                tune_hyperparameters=args.tune,
+                cv_folds=5,
+                verbose=True
+            )
 
-        save_model(model, args.model_path)
+            # Select best model
+            best_model_key, model, justification = select_best_model(comparison_results)
+
+            print(justification)
+
+            # Save comparison results
+            save_comparison_results(
+                comparison_results,
+                output_dir / 'model_comparison.csv',
+                justification
+            )
+
+            # Save best model
+            save_model(model, args.model_path)
+
+        elif args.model_type == 'auto' or args.model_type == 'rf':
+            # Train only Random Forest (default)
+            model = train_random_forest(
+                X_train, y_train,
+                tune_hyperparameters=args.tune,
+                verbose=True
+            )
+            save_model(model, args.model_path)
+
+        else:
+            # Train specific model type
+            from train_compare_models import (
+                train_logistic_regression, train_svm,
+                train_knn, train_xgboost
+            )
+
+            model_trainers = {
+                'logistic': train_logistic_regression,
+                'svm': train_svm,
+                'knn': train_knn,
+                'xgboost': train_xgboost
+            }
+
+            train_func = model_trainers[args.model_type]
+            model, metrics = train_func(X_train, y_train, args.tune, 5, True)
+            save_model(model, args.model_path)
 
     # Load model if needed
     if args.mode in ['evaluate', 'predict']:
@@ -263,15 +312,20 @@ def main():
             print("\n[VISUALIZATION] GENERATING COLOR-CODED GRIDS")
             print("-"*70)
 
-            viz_count = visualize_predictions(
+            train_count, test_count = visualize_predictions(
                 predictions=predictions,
+                train_image_dir=args.train_images,
                 test_image_dir=args.test_images,
-                viz_output_dir=args.viz_output_dir,
+                output_dir=args.output_dir,
                 verbose=True
             )
 
-            if viz_count > 0:
-                print(f"\nVisualization complete! Check {args.viz_output_dir}/test/")
+            if train_count > 0 or test_count > 0:
+                print(f"\nVisualization complete!")
+                if train_count > 0:
+                    print(f"  Train: {train_count} images -> {output_dir}/train/visualizations/")
+                if test_count > 0:
+                    print(f"  Test: {test_count} images -> {output_dir}/test/visualizations/")
 
     print("\n" + "="*70)
     print("PIPELINE COMPLETE!")

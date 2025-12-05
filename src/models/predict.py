@@ -137,39 +137,43 @@ def save_predictions_to_csv(predictions: Dict, output_path: str):
 
 
 def visualize_predictions(predictions: Dict,
+                         train_image_dir: str,
                          test_image_dir: str,
-                         viz_output_dir: str,
+                         output_dir: str,
                          verbose: bool = True):
     """
-    Create color-coded grid visualizations for test images.
+    Create color-coded grid visualizations for train and test images.
 
     Args:
         predictions: Dictionary mapping image names to prediction data
+        train_image_dir: Directory containing train images
         test_image_dir: Directory containing test images
-        viz_output_dir: Directory to save visualizations
+        output_dir: Base directory to save visualizations (creates train/visualizations and test/visualizations subdirectories)
         verbose: Print progress messages
     """
     try:
-        from visualize import visualize_test_predictions
+        from visualize import visualize_all_predictions
     except ImportError:
         # Try relative import
         import sys
         import os
         sys.path.append(os.path.dirname(__file__))
-        from visualize import visualize_test_predictions
+        from visualize import visualize_all_predictions
 
+    train_image_dir = Path(train_image_dir)
     test_image_dir = Path(test_image_dir)
-    viz_output_dir = Path(viz_output_dir)
+    output_dir = Path(output_dir)
 
-    # Create visualizations
-    success_count = visualize_test_predictions(
+    # Create visualizations for both train and test
+    train_count, test_count = visualize_all_predictions(
         predictions_dict=predictions,
+        train_image_dir=train_image_dir,
         test_image_dir=test_image_dir,
-        output_dir=viz_output_dir,
+        output_dir=output_dir,
         verbose=verbose
     )
 
-    return success_count
+    return train_count, test_count
 
 
 def load_model(model_path: str):

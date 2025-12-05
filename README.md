@@ -131,7 +131,7 @@ Extract features, train model, evaluate, and generate predictions:
 python main_pipeline.py --mode full --tune
 ```
 
-**With Visualization** (generates color-coded grid overlays on test images):
+**With Visualization** (generates color-coded grid overlays on both train and test images):
 
 ```bash
 python main_pipeline.py --mode full --tune --visualize
@@ -168,9 +168,9 @@ python main_pipeline.py --mode predict --visualize
 
 **Predict with custom paths and visualization:**
 ```bash
-python main_pipeline.py --mode predict --model_path models/cricket_model.pkl --test_images dataset/test/images --output_dir outputs/test --visualize --viz_output_dir outputs/test/visualizations
+python main_pipeline.py --mode predict --model_path models/cricket_model.pkl --train_images dataset/train/images --test_images dataset/test/images --output_dir outputs --visualize
 ```
-**Expected Output:** `outputs/test/predictions.csv` + `outputs/test/visualizations/*.png` (color-coded grids)
+**Expected Output:** `outputs/test/predictions.csv` + `outputs/train/visualizations/*.png` + `outputs/test/visualizations/*.png` (color-coded grids)
 
 ### 4. Custom Paths
 
@@ -198,8 +198,7 @@ python main_pipeline.py \
 | `--model_path` | Model save/load path | `models/cricket_model.pkl` |
 | `--output_dir` | Output directory | `outputs` |
 | `--tune` | Enable hyperparameter tuning | Flag (off by default) |
-| `--visualize` | Generate visualization images | Flag (off by default) |
-| `--viz_output_dir` | Visualization output directory | `outputs/visualizations` |
+| `--visualize` | Generate visualization images for train and test | Flag (off by default) |
 
 ## Output Files
 
@@ -213,7 +212,8 @@ After running the pipeline, you'll find:
 - `outputs/predictions.csv` - Predictions in required format
 - `outputs/metrics.txt` - Evaluation metrics
 - `outputs/confusion_matrix.png` - Confusion matrix visualization
-- `outputs/visualizations/test/*.png` - Test images with colored prediction grids (if `--visualize` flag used)
+- `outputs/train/visualizations/*.png` - Training images with colored prediction grids (if `--visualize` flag used)
+- `outputs/test/visualizations/*.png` - Test images with colored prediction grids (if `--visualize` flag used)
 
 ## CSV Format
 
@@ -269,7 +269,7 @@ Texture statistics:
 
 ## Visualization Feature
 
-The pipeline includes an optional visualization feature that generates test images with color-coded grid overlays showing model predictions.
+The pipeline includes an optional visualization feature that generates both train and test images with color-coded grid overlays showing model predictions.
 
 ### How to Use
 
@@ -290,19 +290,40 @@ Each grid cell is colored based on its predicted class:
 | 2 | Bat | Red | `(0, 0, 255)` |
 | 3 | Stump | Blue | `(255, 0, 0)` |
 
-### Output
+Cells with class 0 (no object) remain uncolored, showing the original image.
 
-Visualized images are saved to `outputs/visualizations/test/` with:
-- Semi-transparent colored fills for predicted cells
-- Dark gray grid lines showing cell boundaries
+### Output Structure
+
+Visualized images are automatically organized into separate directories:
+
+```
+outputs/
+├── train/
+│   └── visualizations/
+│       ├── train_image001.png
+│       ├── train_image002.png
+│       └── ...
+└── test/
+    └── visualizations/
+        ├── test_image001.png
+        ├── test_image002.png
+        └── ...
+```
+
+Each visualized image includes:
+- Semi-transparent colored fills for predicted object cells (ball/bat/stump)
+- Dark gray grid lines showing cell boundaries (8×8 grid)
+- Cell labels (c01, c02, ..., c64) in the top-left corner of each cell
 - Original image visible underneath
 
 ### Benefits
 
-- **Visual Debugging**: Quickly see where model makes errors
-- **Error Analysis**: Identify systematic misclassifications
-- **Presentation**: Use visualized images in slides/reports
+- **Visual Debugging**: Quickly see where model makes errors on both train and test sets
+- **Overfitting Detection**: Compare train vs test predictions visually
+- **Error Analysis**: Identify systematic misclassifications by class/position
+- **Presentation**: Use visualized images in slides/reports/video
 - **Quality Check**: Verify predictions without parsing CSV
+- **Annotation Verification**: Check if training labels are correct by comparing with predictions
 
 ## Model Training
 
