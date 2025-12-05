@@ -51,7 +51,8 @@ project/
 │   │
 │   └── data_prep/
 │       ├── grid_utils.py
-│       └── annotator.py
+│       ├── annotator.py
+│       └── csv_label_converter.py  # Convert row-column-tag to cell format
 │
 ├── models/                   # Saved models
 ├── outputs/                  # Predictions and metrics
@@ -74,7 +75,11 @@ python -c "import cv2, numpy, sklearn, skimage; print('All dependencies installe
 
 ## Usage
 
-### 1. Annotate Images
+### 1. Prepare Labels
+
+You have two options for creating label files:
+
+#### Option A: Use the Interactive Annotator
 
 Use the annotation tool to label grid cells in your images (0=no object, 1=ball, 2=bat, 3=stump):
 
@@ -89,6 +94,34 @@ python src/data_prep/annotator.py --image_dir dataset/train/images --output_csv 
 - Press `0`, `1`, `2`, `3` to select class (no object, ball, bat, stump)
 - Press `n` to save and move to next image
 - Press `s` to save current image
+
+#### Option B: Convert Existing Labels
+
+If you already have labels in row-column-tag format, convert them using the CSV label converter:
+
+```bash
+python src/data_prep/csv_label_converter.py -i <input_csv> -o <output_csv>
+```
+
+**Example:**
+```bash
+python src/data_prep/csv_label_converter.py -i dataset/train/labels/atul_tagged_data.csv -o dataset/train/labels/labels-atul.csv
+```
+
+This converts from row-column-tag format:
+```csv
+imagename,cell_1_row,cell_1_column,cell_1_object_tag,cell_2_row,cell_2_column,cell_2_object_tag,...
+ball_img_2439.jpg,1,4,Stump,1,5,Stump,1,7,Bat,1,8,Bat
+```
+
+To cell-based format:
+```csv
+ImageFileName,c01,c02,c03,c04,c05,c06,c07,c08,...,c64
+ball_img_2439.jpg,0,0,0,3,3,0,2,2,...,0
+```
+
+**Object Mapping:** Ball→1, Bat→2, Stump→3, No object→0
+
 
 ### 2. Run Complete Pipeline
 
