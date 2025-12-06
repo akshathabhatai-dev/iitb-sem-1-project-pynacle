@@ -23,6 +23,7 @@ from train import train_random_forest, save_model
 from train_compare_models import compare_models, select_best_model, save_comparison_results
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
+from undersample import apply_undersampling, get_undersampling_report
 
 
 def load_images_from_directory(image_dir: str) -> list:
@@ -148,6 +149,14 @@ def main():
                        help='Model type to use (auto=best from comparison, rf=Random Forest only)')
     parser.add_argument('--visualize', action='store_true',
                        help='Generate color-coded grid visualizations for train and test images')
+    parser.add_argument('--undersample', action='store_true', default=True,
+                       help='Apply undersampling to balance class distribution (default: True, use --no-undersample to disable)')
+    parser.add_argument('--no-undersample', dest='undersample', action='store_false',
+                       help='Disable undersampling (keep original imbalanced distribution)')
+    parser.add_argument('--undersample_strategy', type=str,
+                       choices=['image_stratified', 'random'],
+                       default='image_stratified',
+                       help='Undersampling strategy: image_stratified (recommended) or random (default: image_stratified)')
 
     args = parser.parse_args()
 
@@ -176,6 +185,31 @@ def main():
 
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
+
+        # Apply undersampling if requested
+        if args.undersample:
+            print("\n" + "-"*70)
+            print("UNDERSAMPLING CLASS 0 (NO OBJECT)")
+            print("-"*70)
+
+            # Save original y_train for report generation
+            y_train_original = y_train.copy()
+
+            X_train, y_train, train_df = apply_undersampling(
+                X_train, y_train, train_df,
+                strategy=args.undersample_strategy,
+                random_seed=42,
+                verbose=True
+            )
+
+            print(f"\nAfter undersampling: X_train shape = {X_train.shape}")
+            print(f"After undersampling: y_train shape = {y_train.shape}")
+
+            # Generate and save undersampling report
+            report = get_undersampling_report(y_train_original, y_train)
+            report.to_csv(output_dir / 'undersampling_report.csv', index=False)
+            print(f"\nUndersampling report saved to {output_dir / 'undersampling_report.csv'}")
+            print("-"*70)
 
         # Save features
         train_df.to_csv(output_dir / 'train_features.csv', index=False)
