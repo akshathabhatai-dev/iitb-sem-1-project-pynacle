@@ -238,6 +238,27 @@ class GridAnnotator:
                 self.save_annotations()
                 self.current_idx = max(0, self.current_idx - 2)
                 break
+            elif key == ord('r'):
+                # Reject image: delete from folder & CSV
+                print(f"Rejecting image: {img_name}")
+
+                # 1. Delete the image file
+                try:
+                    os.remove(image_path)
+                    print(f"Deleted image file: {image_path}")
+                except Exception as e:
+                    print(f"Error deleting image file: {e}")
+
+                # 2. Remove annotation entry
+                if img_name in self.annotations:
+                    del self.annotations[img_name]
+                    self.save_annotations()
+                    print(f"Removed annotation record for {img_name}")
+
+                # 3. Remove from image list
+                self.image_files.pop(self.current_idx)
+                break
+
 
         cv2.destroyAllWindows()
         return True
