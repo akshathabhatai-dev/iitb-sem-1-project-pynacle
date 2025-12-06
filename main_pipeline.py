@@ -23,6 +23,8 @@ from train import train_random_forest, save_model
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="PIL")
 
 def load_images_from_directory(image_dir: str) -> list:
     """Load all images from a directory."""
@@ -69,11 +71,15 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
 
     # Create a mapping of image names to labels
     labels_dict = {}
-    for _, row in labels_df.iterrows():
-        img_name = row['ImageFileName']
-        cell_labels = [int(row[f'c{i:02d}']) for i in range(1, 65)]
-        labels_dict[img_name] = cell_labels
-
+    if labels_df is None or labels_df.empty:
+        # raise ValueError("Labels DataFrame is empty or None.")
+        if verbose:
+            print("Warning: Labels DataFrame is empty or None. Proceeding without labels.")
+    else:
+        for _, row in labels_df.iterrows():
+            img_name = row['ImageFileName']
+            cell_labels = [int(row[f'c{i:02d}']) for i in range(1, 65)]
+            labels_dict[img_name] = cell_labels
     iterator = tqdm(images, desc="Extracting features") if verbose else images
 
     for img_name, img in iterator:
@@ -129,10 +135,14 @@ def main():
                        help='Directory with training images')
     parser.add_argument('--test_images', type=str, default='dataset/test/images',
                        help='Directory with test images')
+    parser.add_argument('--validate_images', type=str, default='dataset/validate/images',
+                       help='Directory with validation images')
     parser.add_argument('--train_labels', type=str, default='dataset/train/labels/labels.csv',
                        help='Path to training labels CSV')
     parser.add_argument('--test_labels', type=str, default='dataset/test/labels/labels.csv',
                        help='Path to test labels CSV')
+    parser.add_argument('--validate_labels', type=str, default='dataset/validate/labels/labels.csv',
+                       help='Path to validation labels CSV')
     parser.add_argument('--model_path', type=str, default='models/cricket_model.pkl',
                        help='Path to save/load model')
     parser.add_argument('--output_dir', type=str, default='outputs',
@@ -179,10 +189,10 @@ def main():
         print(f"Saved training features to {output_dir}")
 
         # Load test data if available
-        if Path(args.test_images).exists() and Path(args.test_labels).exists():
+        if Path(args.test_images).exists():
             print("\nLoading test data...")
             test_images = load_images_from_directory(args.test_images)
-            test_labels_df = load_labels_from_csv(args.test_labels)
+            test_labels_df = load_labels_from_csv(args.test_labels) if Path(args.test_labels).exists() else None
 
             print(f"Found {len(test_images)} test images")
 
@@ -191,9 +201,26 @@ def main():
             print(f"Extracted features: X_test shape = {X_test.shape}")
 
             np.save(output_dir / 'X_test.npy', X_test)
-            np.save(output_dir / 'y_test.npy', y_test)
+            if y_test is not None: 
+                np.save(output_dir / 'y_test.npy', y_test)
             test_df.to_csv(output_dir / 'test_features.csv', index=False)
             print(f"Saved test features to {output_dir}")
+
+        # Load test data if available
+        if Path(args.validate_images).exists() and Path(args.validate_labels).exists():
+            print("\nLoading validation data...")
+            validate_images = load_images_from_directory(args.validate_images)
+            validate_labels_df = load_labels_from_csv(args.validate_labels)
+
+            print(f"Found {len(validate_images)} validation images")
+
+            X_validate, y_validate, _, validate_df = extract_features_and_labels(validate_images, validate_labels_df)
+            print(f"Extracted features: X_validate shape = {X_validate.shape}")
+
+            np.save(output_dir / 'X_validate.npy', X_validate)
+            np.save(output_dir / 'y_validate.npy', y_validate)
+            validate_df.to_csv(output_dir / 'validate_features.csv', index=False)
+            print(f"Saved validation features to {output_dir}")
 
     # Load features if not in extract mode
     if args.mode in ['train', 'evaluate', 'full']:
@@ -229,11 +256,16 @@ def main():
         print("-"*70)
 
         # Load test data
+        # if args.mode == 'predict':
+        #     X_test = np.load(output_dir / 'X_test.npy')
+        #     # y_test = np.load(output_dir / 'y_test.npy')
+        # elif args.mode != 'full':
         if args.mode != 'full':
-            X_test = np.load(output_dir / 'X_test.npy')
-            y_test = np.load(output_dir / 'y_test.npy')
+            X_validate = np.load(output_dir / 'X_validate.npy')
+            y_validate = np.load(output_dir / 'y_validate.npy')
+            print(f"Loaded X_validate: {X_validate.shape}, y_validate: {y_validate.shape}")
 
-        results = evaluate_model(model, X_test, y_test, verbose=True)
+        results = evaluate_model(model, X_validate, y_validate, verbose=True)
 
         # Save results
         save_metrics_to_file(results, output_dir / 'metrics.txt')
@@ -250,10 +282,11 @@ def main():
                                    list(Path(args.train_images).glob('*.jpg')))
         test_image_paths = sorted(list(Path(args.test_images).glob('*.png')) +
                                   list(Path(args.test_images).glob('*.jpg')))
+        validate_image_paths = sorted(list(Path(args.validate_images).glob('*.png')) +
+                                  list(Path(args.validate_images).glob('*.jpg')))
 
-        image_paths = train_image_paths + test_image_paths
-        train_or_test = ['train'] * len(train_image_paths) + ['test'] * len(test_image_paths)
-
+        image_paths = train_image_paths + test_image_paths + validate_image_paths
+        train_or_test = ['train'] * len(train_image_paths) + ['test'] * len(test_image_paths) + ['validate'] * len(validate_image_paths)
         predictions = predict_on_images(model, image_paths, train_or_test, verbose=True)
 
         save_predictions_to_csv(predictions, output_dir / 'predictions.csv')

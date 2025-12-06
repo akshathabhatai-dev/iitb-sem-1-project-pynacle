@@ -55,7 +55,7 @@ class GridAnnotator:
             0: (128, 128, 128),  # Gray
             1: (0, 0, 255),      # Red
             2: (139, 69, 19),    # Brown
-            3: (255, 255, 255)   # White
+            3: (0, 255, 0)   # Green
         }
 
     def load_annotations(self):
@@ -195,11 +195,14 @@ class GridAnnotator:
 
             # Draw instructions
             info_text = f"Current Class: {state['current_label']} ({self.class_names[state['current_label']]})"
-            cv2.putText(display, info_text, (10, 30),
+            image_name_text = f"Image Name: {img_name}"
+            cv2.putText(display, image_name_text, (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+            cv2.putText(display, info_text, (10, 70),
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
             progress_text = f"Image {self.current_idx + 1}/{len(self.image_files)}"
-            cv2.putText(display, progress_text, (10, 70),
+            cv2.putText(display, progress_text, (10, 110),
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 
             cv2.imshow(window_name, display)
