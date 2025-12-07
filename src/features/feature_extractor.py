@@ -17,9 +17,11 @@ from gabor_features import extract_gabor_features, get_gabor_feature_names
 from glcm_features import extract_glcm_features, get_glcm_feature_names
 from hu_moment_features import extract_hu_moment_features, get_hu_moment_feature_names
 from sift_features import extract_sift_features, get_sift_feature_names
+from orb_features import extract_orb_features, get_orb_feature_names
+from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features, get_na_aware_hog_feature_names
 
 
-def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
+def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.ndarray:
     """
     Extract all 88 features from a single RGB cell.
 
@@ -60,6 +62,12 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
 
     # 4. Histogram of Oriented Gradients (20 features)
     hog_features = extract_hog_features(cell_gray)
+    # hog_features = na_hog_vector
+    # print(hog_features.shape)
+
+    # if na_hog_vector is None or len(na_hog_vector) == 0:
+    #     raise ValueError("Neighborhood HOG failed: na_hog_vector is empty!")
+    # hog_features = na_hog_vector.astype(np.float32)
 
     # 5. Gabor Filters (20 features)
     gabor_features = extract_gabor_features(cell_gray)
@@ -68,7 +76,9 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
     glcm_features = extract_glcm_features(cell_gray)
 
     hu_moment_features = extract_hu_moment_features(cell_gray)
-    sift_features = extract_sift_features(cell_gray)
+    # sift_features = extract_sift_features(cell_gray)
+    sift_features = extract_sift_features(cell_gray, max_features=5)  # limit to first 5 keypoints
+    orb_features = extract_orb_features(cell_gray, max_features=10)  # limit to first 10 keypoints
 
     
 
@@ -79,18 +89,24 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
         # hsv_features,      # 14
         hsv_hist_features, # 768
         lbp_features,      # 10
-        hog_features,      # 20
+        hog_features,      # 20/ 28512
         gabor_features,    # 20
         glcm_features,     # 10
         hu_moment_features, # 7
-        # sift_features      # 16384
+        sift_features,      # 640
+        orb_features      # 320
     ])
-
+    # print("SIFT Size:", len(sift_features))
+    # print("ORB Size:", len(orb_features))
+    # print("NA-HOG Size:", len(hog_features))
     # print(f"Extracted {len(all_features)} features from cell.")
     # Verify we have exactly 88 features
     # assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
-    assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
+    # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
+    assert len(all_features) == 3121, f"Expected 3121 features, got {len(all_features)}" # with normal hog all features
+    # assert len(all_features) == 2565, f"Expected 2565 features, got {len(all_features)}" # with normal hog
+    # assert len(all_features) == 31057, f"Expected 31057 features, got {len(all_features)}" # with na normal hog
     # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
     # assert len(all_features) == 856, f"Expected 856 features, got {len(all_features)}"
 
@@ -112,18 +128,48 @@ def get_all_feature_names() -> List[str]:
     all_names.extend(get_hsv_hist_feature_names())  # 768
     all_names.extend(get_lbp_feature_names())    # 10
     all_names.extend(get_hog_feature_names())    # 20
+    # all_names.extend(get_na_aware_hog_feature_names())    # 20
     all_names.extend(get_gabor_feature_names())  # 20
     all_names.extend(get_glcm_feature_names())   # 10 / 12
     all_names.extend(get_hu_moment_feature_names())   # 7
+    all_names.extend(get_sift_feature_names(max_features=5))   # 640
+    all_names.extend(get_orb_feature_names(max_features=10))   # 320
     # all_names.extend(get_sift_feature_names())   # 16384
 
+    # print(f"Extracted {len(all_names)} feature names from cell.")
     # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
-    assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
+    # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
+    # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
+    assert len(all_names) == 3121, f"Expected 3121 features, got {len(all_names)}" # with normal hog all features
+    # assert len(all_names) == 2565, f"Expected 2565 feature names, got {len(all_names)}" # with normal hog
+    # assert len(all_names) == 31057, f"Expected 31057 feature names, got {len(all_names)}" # with na normal hog
     # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"
     # assert len(all_names) == 856, f"Expected 856 feature names, got {len(all_names)}"
 
     return all_names
 
+def extract_hog_per_cell(cells: List[np.ndarray]) -> List[np.ndarray]:
+    """
+    Compute HOG for each cell in the 8x8 grid.
+    Returns list of 64 HOG vectors.
+    """
+    # Convert each of 64 cells to grayscale
+    gray_cells = [cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY) for cell in cells]
+
+    # 1️⃣ Compute normal HOG for each cell
+    hog_list = compute_hog_per_cell(gray_cells)
+
+    # 2️⃣ Compute neighborhood-aware HOG for each of 64 cells
+    hog_na_list = extract_na_aware_hog_for_grid_features(hog_list)
+
+    for idx, v in enumerate(hog_na_list):
+        # print(f"NA-HOG vector length for cell {idx}: {len(v)}")
+        if v is None or len(v) == 0:
+            print(f"[ERROR] NA-HOG failed for cell index {idx}")
+            print(f"Original HOG length: {len(hog_list[idx])}")
+            raise ValueError("Invalid NA-HOG vector")
+        
+    return hog_na_list
 
 def extract_features_from_image(image: np.ndarray, cells: List[np.ndarray] = None) -> np.ndarray:
     """
@@ -142,10 +188,36 @@ def extract_features_from_image(image: np.ndarray, cells: List[np.ndarray] = Non
 
     if cells is None:
         cells = divide_into_grid(image, grid_size=(8, 8))
+    
+    # # Convert each of 64 cells to grayscale
+    # gray_cells = [cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY) for cell in cells]
+
+    # # 1️⃣ Compute normal HOG for each cell
+    # hog_list = compute_hog_per_cell(gray_cells)
+
+    # 2️⃣ Compute neighborhood-aware HOG for each of 64 cells
+    hog_na_list = extract_hog_per_cell(cells)
+
+    # for idx, v in enumerate(hog_na_list):
+    #     print(f"NA-HOG vector length for cell {idx}: {len(v)}")
+    #     if v is None or len(v) == 0:
+    #         print(f"[ERROR] NA-HOG failed for cell index {idx}")
+    #         print(f"Original HOG length: {len(hog_list[idx])}")
+    #         raise ValueError("Invalid NA-HOG vector")
+
+    
 
     features_list = []
-    for cell in cells:
-        features = extract_features_from_cell(cell)
+    # for cell in cells:
+        # features = extract_features_from_cell(cell)
+        # features_list.append(features)
+    for idx, cell in enumerate(cells):
+        print(f"Extracting features from cell {idx+1}/64")
+        print(hog_na_list[idx].shape())
+        features = extract_features_from_cell(
+            cell_rgb=cell,
+            na_hog_vector=hog_na_list[idx]      # inject NA-HOG here
+        )
         features_list.append(features)
 
     return np.array(features_list, dtype=np.float32)

@@ -25,21 +25,23 @@ def extract_sift_features(cell_gray: np.ndarray, max_features=128) -> np.ndarray
     kps, desc = sift.detectAndCompute(cell_gray, None)
 
     if desc is None:
-        return np.zeros((max_features * 128,))  # SIFT size=128
+        return np.zeros((max_features * 128,), dtype=np.float32)  # SIFT size=128
 
     desc = desc[:max_features]  # keep first N descriptors
     desc = desc.flatten()
 
     # pad if needed
-    if len(desc) < max_features * 128:
-        desc = np.pad(desc, (0, max_features * 128 - len(desc)))
+    # Pad if fewer than max_features
+    expected_len = max_features * 128
+    if len(desc) < expected_len:
+        desc = np.pad(desc, (0, expected_len - len(desc)))
     features = desc.astype(np.float32)
 
 
     return features
 
 
-def get_sift_feature_names() -> List[str]:
+def get_sift_feature_names(max_features=128) -> List[str]:
     """
     Get the names of SIFT features.
 
@@ -47,4 +49,4 @@ def get_sift_feature_names() -> List[str]:
         List of 16384 feature names
     """
     
-    return [f'sift_bin_{i}' for i in range(128 * 128)]
+    return [f'sift_bin_{i}' for i in range(max_features * 128)]

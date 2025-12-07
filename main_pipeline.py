@@ -22,12 +22,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
 from grid_utils import divide_into_grid, validate_image_size, resize_image
-from feature_extractor import extract_features_from_cell, get_all_feature_names
+from feature_extractor import extract_features_from_cell, get_all_feature_names, extract_hog_per_cell
 from train import train_random_forest, save_model
 from train_compare_models import compare_models, select_best_model, save_comparison_results
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
-from undersample import apply_undersampling, get_undersampling_report
+from undersample import apply_undersampling, get_undersampling_report, oversample_class_1
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="PIL")
@@ -56,7 +56,7 @@ def load_labels_from_csv(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True):
+def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True, test_data: bool = False):
     """
     Extract features and labels from images.
 
@@ -91,16 +91,18 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
     for img_name, img in iterator:
         # Check if labels exist for this image
         if img_name not in labels_dict:
-            if verbose:
+            if verbose and not test_data:
                 print(f"Warning: No labels found for {img_name}, skipping...")
             continue
 
         # Divide into grid
         cells = divide_into_grid(img, grid_size=(8, 8))
 
+        hog_na_list = extract_hog_per_cell(cells)
+
         # Extract features from each cell
         for cell_idx, cell in enumerate(cells):
-            features = extract_features_from_cell(cell)
+            features = extract_features_from_cell(cell, na_hog_vector=hog_na_list[cell_idx])
             label = labels_dict[img_name][cell_idx]
 
             X_list.append(features)
@@ -231,7 +233,7 @@ def main():
         # Extract features
         X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df)
 
-        X_train, y_train = select_balanced_data(X_train, y_train, under_sample_size=800, over_sample_size=600, seed=111)
+        # X_train, y_train = select_balanced_data(X_train, y_train, under_sample_size=800, over_sample_size=600, seed=111)
 
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
@@ -261,6 +263,22 @@ def main():
             print(f"\nUndersampling report saved to {output_dir / 'undersampling_report.csv'}")
             print("-"*70)
 
+            X_train, y_train, train_df = oversample_class_1(
+                X_train, y_train, train_df,
+                target_count_ratio=0.95,
+                random_seed=42,
+                verbose=True
+            )
+
+            print(f"\nAfter oversampling: X_train shape = {X_train.shape}")
+            print(f"After oversampling: y_train shape = {y_train.shape}")
+
+            # Generate and save oversampling report
+            report = get_undersampling_report(y_train_original, y_train)
+            report.to_csv(output_dir / 'oversampling_report.csv', index=False)
+            print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
+            print("-"*70)
+
         # Save features
         train_df.to_csv(output_dir / 'train_features.csv', index=False)
         np.save(output_dir / 'X_train.npy', X_train)
@@ -275,7 +293,7 @@ def main():
 
             print(f"Found {len(test_images)} test images")
 
-            X_test, y_test, _, test_df = extract_features_and_labels(test_images, test_labels_df)
+            X_test, y_test, _, test_df = extract_features_and_labels(test_images, test_labels_df, test_data=True)
 
             print(f"Extracted features: X_test shape = {X_test.shape}")
 
@@ -320,18 +338,18 @@ def main():
         #     verbose=True
         # )
 
-        if args.model == 'random_forest':
-            model = train_random_forest(
-                X_train, y_train,
-                tune_hyperparameters=args.tune,
-                verbose=True
-            )
-        else:
-            model = train_xgboost(
-                X_train, y_train,
-                tune_hyperparameters=args.tune,
-                verbose=True
-            )
+        # if args.model == 'random_forest':
+        #     model = train_random_forest(
+        #         X_train, y_train,
+        #         tune_hyperparameters=args.tune,
+        #         verbose=True
+        #     )
+        # else:
+        #     model = train_xgboost(
+        #         X_train, y_train,
+        #         tune_hyperparameters=args.tune,
+        #         verbose=True
+        #     )
         if args.compare_models:
             # Compare all 5 models and select best
             print("Model comparison mode enabled - training all 5 models...")
