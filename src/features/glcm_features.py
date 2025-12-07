@@ -47,11 +47,12 @@ def extract_glcm_features(cell_gray: np.ndarray, distances: List[int] = [1],
         homogeneity = graycoprops(glcm, 'homogeneity')
         energy = graycoprops(glcm, 'energy')
         correlation = graycoprops(glcm, 'correlation')
+        asm = graycoprops(glcm, 'ASM')
 
         # For each property, compute mean and max across angles
         features = []
 
-        for prop in [contrast, dissimilarity, homogeneity, energy, correlation]:
+        for prop in [contrast, dissimilarity, homogeneity, energy, correlation, asm]:
             # prop has shape (num_distances, num_angles)
             # We want statistics across angles
             prop_values = prop[0, :]  # Take first distance
@@ -81,7 +82,7 @@ def get_glcm_feature_names() -> List[str]:
     Returns:
         List of 10 feature names
     """
-    properties = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']
+    properties = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
     names = []
 
     for prop in properties:

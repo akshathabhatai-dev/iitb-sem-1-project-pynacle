@@ -8,11 +8,15 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from rgb_features import extract_rgb_histogram_features, get_rgb_feature_names
+from rgb_hist_features import extract_rgb_hist_features, get_rgb_hist_feature_names
 from hsv_features import extract_hsv_color_features, rgb_to_hsv, get_hsv_feature_names
+from hsv_hist_features import extract_hsv_hist_color_features, get_hsv_hist_feature_names
 from lbp_features import extract_lbp_features, get_lbp_feature_names
 from hog_features import extract_hog_features, get_hog_feature_names
 from gabor_features import extract_gabor_features, get_gabor_feature_names
 from glcm_features import extract_glcm_features, get_glcm_feature_names
+from hu_moment_features import extract_hu_moment_features, get_hu_moment_feature_names
+from sift_features import extract_sift_features, get_sift_feature_names
 
 
 def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
@@ -38,11 +42,13 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
     # ========== COLOR FEATURES (28 total) ==========
 
     # 1. RGB Histogram Features (14 features)
-    rgb_features = extract_rgb_histogram_features(cell_rgb)
+    # rgb_features = extract_rgb_histogram_features(cell_rgb)
+    rgb_hist_features = extract_rgb_hist_features(cell_rgb)
 
     # 2. HSV Color Features (14 features)
     cell_hsv = rgb_to_hsv(cell_rgb)
-    hsv_features = extract_hsv_color_features(cell_hsv)
+    # hsv_features = extract_hsv_color_features(cell_hsv)
+    hsv_hist_features = extract_hsv_hist_color_features(cell_hsv)
 
     # ========== TEXTURE FEATURES (60 total) ==========
 
@@ -61,18 +67,32 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
     # 6. GLCM (10 features)
     glcm_features = extract_glcm_features(cell_gray)
 
+    hu_moment_features = extract_hu_moment_features(cell_gray)
+    sift_features = extract_sift_features(cell_gray)
+
+    
+
     # ========== COMBINE ALL FEATURES ==========
     all_features = np.concatenate([
-        rgb_features,      # 14
-        hsv_features,      # 14
+        # rgb_features,      # 14
+        rgb_hist_features, # 768
+        # hsv_features,      # 14
+        hsv_hist_features, # 768
         lbp_features,      # 10
         hog_features,      # 20
         gabor_features,    # 20
-        glcm_features      # 10
+        glcm_features,     # 10
+        hu_moment_features, # 7
+        # sift_features      # 16384
     ])
 
+    # print(f"Extracted {len(all_features)} features from cell.")
     # Verify we have exactly 88 features
-    assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
+    # assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
+    # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
+    assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
+    # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
+    # assert len(all_features) == 856, f"Expected 856 features, got {len(all_features)}"
 
     return all_features.astype(np.float32)
 
@@ -86,14 +106,21 @@ def get_all_feature_names() -> List[str]:
     """
     all_names = []
 
-    all_names.extend(get_rgb_feature_names())    # 14
-    all_names.extend(get_hsv_feature_names())    # 14
+    # all_names.extend(get_rgb_feature_names())    # 14
+    all_names.extend(get_rgb_hist_feature_names())    # 768
+    # all_names.extend(get_hsv_feature_names())    # 14
+    all_names.extend(get_hsv_hist_feature_names())  # 768
     all_names.extend(get_lbp_feature_names())    # 10
     all_names.extend(get_hog_feature_names())    # 20
     all_names.extend(get_gabor_feature_names())  # 20
-    all_names.extend(get_glcm_feature_names())   # 10
+    all_names.extend(get_glcm_feature_names())   # 10 / 12
+    all_names.extend(get_hu_moment_feature_names())   # 7
+    # all_names.extend(get_sift_feature_names())   # 16384
 
-    assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
+    # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
+    assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
+    # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"
+    # assert len(all_names) == 856, f"Expected 856 feature names, got {len(all_names)}"
 
     return all_names
 

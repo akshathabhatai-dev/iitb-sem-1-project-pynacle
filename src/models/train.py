@@ -3,6 +3,7 @@ import pandas as pd
 import pickle
 from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.utils.class_weight import compute_class_weight
 from typing import Tuple, Dict
@@ -13,7 +14,120 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'features'))
 
+# ============================================================
+#  XGBOOST TRAINING FUNCTION
+# ============================================================
+def train_xgboost(X_train: np.ndarray, y_train: np.ndarray,
+                  tune_hyperparameters: bool = True,
+                  cv_folds: int = 5,
+                  verbose: bool = True) -> XGBClassifier:
 
+    if verbose:
+        print("="*60)
+        print("Training XGBoost Classifier")
+        print("="*60)
+        print(f"Training samples: {X_train.shape[0]}")
+        print(f"Features: {X_train.shape[1]}")
+        print(f"Classes: {np.unique(y_train)}")
+
+    # Compute class weights → XGBoost uses scale_pos_weight for binary,
+    # but for multi-class we apply weights manually.
+    classes = np.unique(y_train)
+    class_weights = compute_class_weight('balanced', classes=classes, y=y_train)
+    weight_dict = dict(zip(classes, class_weights))
+
+    sample_weights = np.array([weight_dict[c] for c in y_train])
+
+    if tune_hyperparameters:
+        if verbose:
+            print("\nPerforming grid search for XGBoost...")
+
+        param_grid = {
+            'n_estimators': [200, 400],
+            'max_depth': [6, 8, 10],
+            'learning_rate': [0.05, 0.1],
+            'subsample': [0.8, 1.0],
+            'colsample_bytree': [0.8, 1.0]
+        }
+
+        base_model = XGBClassifier(
+            objective="multi:softmax",
+            num_class=len(classes),
+            eval_metric="mlogloss",
+            tree_method="hist",
+            random_state=42
+        )
+
+        grid_search = GridSearchCV(
+            estimator=base_model,
+            param_grid=param_grid,
+            scoring="f1_macro",
+            cv=cv_folds,
+            verbose=1 if verbose else 0,
+            n_jobs=-1
+        )
+
+        grid_search.fit(X_train, y_train, sample_weight=sample_weights)
+
+        if verbose:
+            print(f"\nBest XGBoost Params: {grid_search.best_params_}")
+            print(f"Best F1-macro Score: {grid_search.best_score_:.4f}\n")
+
+        model = grid_search.best_estimator_
+
+    else:
+        if verbose:
+            print("\nTraining XGBoost with default parameters...")
+        
+        # Best XGBoost Params: {'colsample_bytree': 0.8, 'learning_rate': 0.1, 'max_depth': 8, 'n_estimators': 200, 'subsample': 0.8}
+
+        model = XGBClassifier(
+            objective="multi:softmax",
+            num_class=len(classes),
+            n_estimators=200,
+            max_depth=8,
+            learning_rate=0.1,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            eval_metric="mlogloss",
+            tree_method="hist",
+            n_jobs=-1,
+            random_state=42
+        )
+
+        # model = XGBClassifier(
+        #     objective="multi:softmax",
+        #     num_class=len(classes),
+        #     n_estimators=400,
+        #     max_depth=8,
+        #     learning_rate=0.1,
+        #     subsample=0.9,
+        #     colsample_bytree=0.9,
+        #     eval_metric="mlogloss",
+        #     tree_method="hist",
+        #     random_state=42
+        # )
+
+        model.fit(X_train, y_train, sample_weight=sample_weights)
+
+        if verbose:
+            scores = cross_val_score(
+                model, X_train, y_train,
+                scoring="f1_macro",
+                cv=cv_folds
+            )
+            print(f"Cross-val F1-macro: {scores.mean():.4f} (+/- {scores.std():.4f})")
+
+    print("="*60)
+    print("XGBoost Training Complete!")
+    print("="*60)
+
+    return model
+
+
+# ============================================================
+# RANDOM FOREST TRAINING
+# ============================================================
 def train_random_forest(X_train: np.ndarray, y_train: np.ndarray,
                        tune_hyperparameters: bool = True,
                        cv_folds: int = 5,
@@ -225,12 +339,26 @@ def main():
     X_train, y_train = load_training_data(args.features, args.labels)
 
     # Train model
-    model = train_random_forest(
-        X_train, y_train,
-        tune_hyperparameters=args.tune,
-        cv_folds=args.cv_folds,
-        verbose=True
-    )
+    # model = train_random_forest(
+    #     X_train, y_train,
+    #     tune_hyperparameters=args.tune,
+    #     cv_folds=args.cv_folds,
+    #     verbose=True
+    # )
+    if args.model == 'rf':
+        model = train_random_forest(
+            X_train, y_train,
+            tune_hyperparameters=args.tune,
+            cv_folds=args.cv_folds,
+            verbose=True
+        )
+    else:
+        model = train_xgboost(
+            X_train, y_train,
+            tune_hyperparameters=args.tune,
+            cv_folds=args.cv_folds,
+            verbose=True
+        )
 
     # Save model
     save_model(model, args.output)

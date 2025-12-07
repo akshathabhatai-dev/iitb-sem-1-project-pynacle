@@ -12,13 +12,17 @@ from tqdm import tqdm
 import sys
 import os
 
+from src.models.train import train_xgboost
+
+# from src.features.feature_extractor import get_all_feature_names
+
 # Add src directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'features'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
 from grid_utils import divide_into_grid, validate_image_size, resize_image
-from feature_extractor import extract_features_from_cell
+from feature_extractor import extract_features_from_cell, get_all_feature_names
 from train import train_random_forest, save_model
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
@@ -103,14 +107,15 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             cell_index_list.append(cell_idx)
     # Create DataFrame for easier analysis
 
-    feature_columns = (
-        [f"rgb_{i}" for i in range(14)] +
-        [f"hsv_{i}" for i in range(14)] +
-        [f"lbp_{i}" for i in range(10)] +
-        [f"hog_{i}" for i in range(20)] +
-        [f"gabor_{i}" for i in range(20)] +
-        [f"glcm_{i}" for i in range(10)]
-    )
+    # feature_columns = (
+    #     [f"rgb_{i}" for i in range(14)] +
+    #     [f"hsv_{i}" for i in range(14)] +
+    #     [f"lbp_{i}" for i in range(10)] +
+    #     [f"hog_{i}" for i in range(20)] +
+    #     [f"gabor_{i}" for i in range(20)] +
+    #     [f"glcm_{i}" for i in range(10)]
+    # )
+    feature_columns = get_all_feature_names()
 
     columns = ["image_name", "cell_index", 'label'] + feature_columns
     df = pd.DataFrame(X_list, columns=feature_columns)
@@ -123,6 +128,37 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
 
     return X, y, image_names_list, df
 
+def select_balanced_data(X_train, y_train, under_sample_size=1500, over_sample_size=1500, seed=42):
+    """
+    Returns:
+        X_final: X with all class 1,2,3 + sample_size random class 0
+        y_final: corresponding y values
+    """
+
+    # Set the seed for reproducibility
+    rng = np.random.default_rng(seed)
+
+    # Get indices for classes
+    idx_0 = np.where(y_train == 0)[0]
+    idx_1 = np.where(y_train == 1)[0]
+    idx_23 = np.where(np.isin(y_train, [2, 3]))[0]
+
+    # Randomly sample class-0 indices
+    idx_0_sample = rng.choice(idx_0, size=under_sample_size, replace=False)
+    idx_1_sample = rng.choice(idx_1, size=over_sample_size, replace=True)
+
+    # Combine indices
+    final_idx = np.concatenate([idx_0_sample, idx_1_sample, idx_23])
+
+    # Shuffle final indices with the same seed
+    rng.shuffle(final_idx)
+
+    # Select final data
+    X_final = X_train[final_idx]
+    y_final = y_train[final_idx]
+
+    return X_final, y_final
+
 
 def main():
     """Main pipeline execution."""
@@ -131,6 +167,8 @@ def main():
     parser = argparse.ArgumentParser(description='Cricket Object Detection Pipeline')
     parser.add_argument('--mode', type=str, choices=['extract', 'train', 'evaluate', 'predict', 'full'],
                        required=True, help='Pipeline mode')
+    parser.add_argument('--model', type=str, choices=['xgboost', 'random_forest'], 
+                       help='Model type to use')
     parser.add_argument('--train_images', type=str, default='dataset/train/images',
                        help='Directory with training images')
     parser.add_argument('--test_images', type=str, default='dataset/test/images',
@@ -178,6 +216,8 @@ def main():
 
         # Extract features
         X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df)
+
+        X_train, y_train = select_balanced_data(X_train, y_train, under_sample_size=800, over_sample_size=600, seed=111)
 
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
@@ -235,11 +275,24 @@ def main():
         print("\n[2/4] MODEL TRAINING")
         print("-"*70)
 
-        model = train_random_forest(
-            X_train, y_train,
-            tune_hyperparameters=args.tune,
-            verbose=True
-        )
+        # model = train_random_forest(
+        #     X_train, y_train,
+        #     tune_hyperparameters=args.tune,
+        #     verbose=True
+        # )
+
+        if args.model == 'random_forest':
+            model = train_random_forest(
+                X_train, y_train,
+                tune_hyperparameters=args.tune,
+                verbose=True
+            )
+        else:
+            model = train_xgboost(
+                X_train, y_train,
+                tune_hyperparameters=args.tune,
+                verbose=True
+            )
 
         save_model(model, args.model_path)
 
@@ -255,11 +308,7 @@ def main():
         print("\n[3/4] MODEL EVALUATION")
         print("-"*70)
 
-        # Load test data
-        # if args.mode == 'predict':
-        #     X_test = np.load(output_dir / 'X_test.npy')
-        #     # y_test = np.load(output_dir / 'y_test.npy')
-        # elif args.mode != 'full':
+        # Load validation data
         if args.mode != 'full':
             X_validate = np.load(output_dir / 'X_validate.npy')
             y_validate = np.load(output_dir / 'y_validate.npy')
@@ -273,7 +322,7 @@ def main():
                             save_path=output_dir / 'confusion_matrix.png')
 
     # PREDICT MODE
-    if args.mode in ['full', 'predict']:
+    if False and args.mode in ['full', 'predict']:
         print("\n[4/4] GENERATING PREDICTIONS")
         print("-"*70)
 
