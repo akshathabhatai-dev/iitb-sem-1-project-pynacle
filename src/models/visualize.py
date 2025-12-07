@@ -180,55 +180,57 @@ def visualize_predictions(image_path: Path,
         return False
 
 
-def visualize_test_predictions(predictions_dict: Dict,
-                               test_image_dir: Path,
-                               output_dir: Path,
-                               verbose: bool = True) -> int:
+def visualize_dataset_predictions(predictions_dict: Dict,
+                                   image_dir: Path,
+                                   output_subdir: Path,
+                                   dataset_type: str,
+                                   verbose: bool = True) -> int:
     """
-    Batch visualize all test image predictions.
+    Batch visualize predictions for a specific dataset (train or test).
 
     Args:
         predictions_dict: Dictionary mapping image names to prediction data
-                         Format: {img_name: {'filename': str,
-                                            'train_or_test': str,
-                                            'predictions': np.ndarray}}
-        test_image_dir: Directory containing test images
-        output_dir: Directory to save visualizations
+        image_dir: Directory containing images
+        output_subdir: Subdirectory to save visualizations (e.g., output_dir/train/visualizations)
+        dataset_type: 'train' or 'test'
         verbose: Print progress messages
 
     Returns:
         Number of successfully visualized images
     """
     # Create output directory
-    output_dir = Path(output_dir)
-    test_output_dir = output_dir / 'test'
-    test_output_dir.mkdir(parents=True, exist_ok=True)
+    output_subdir.mkdir(parents=True, exist_ok=True)
 
-    # Filter for test images only
-    test_predictions = {
+    # Filter predictions for this dataset type
+    dataset_predictions = {
         name: data for name, data in predictions_dict.items()
-        if data['train_or_test'] == 'test'
+        if data['train_or_test'] == dataset_type
     }
 
+    if len(dataset_predictions) == 0:
+        if verbose:
+            print(f"No {dataset_type} images found to visualize")
+        return 0
+
     if verbose:
-        print(f"\nVisualizing {len(test_predictions)} test images...")
+        print(f"\nVisualizing {len(dataset_predictions)} {dataset_type} images...")
 
     success_count = 0
 
-    for idx, (img_name, pred_data) in enumerate(test_predictions.items()):
+    for idx, (img_name, pred_data) in enumerate(dataset_predictions.items()):
         if verbose and (idx + 1) % 10 == 0:
-            print(f"  Visualized {idx + 1}/{len(test_predictions)} images...")
+            print(f"  Visualized {idx + 1}/{len(dataset_predictions)} {dataset_type} images...")
 
-        # Find image in test directory
+        # Find image in directory
         image_path = None
         for ext in ['.png', '.jpg', '.jpeg']:
-            potential_path = test_image_dir / img_name.replace(Path(img_name).suffix, ext)
+            potential_path = image_dir / img_name.replace(Path(img_name).suffix, ext)
             if potential_path.exists():
                 image_path = potential_path
                 break
 
         if image_path is None:
-            image_path = test_image_dir / img_name
+            image_path = image_dir / img_name
 
         if not image_path.exists():
             if verbose:
@@ -236,7 +238,7 @@ def visualize_test_predictions(predictions_dict: Dict,
             continue
 
         # Output path maintains original filename
-        output_path = test_output_dir / image_path.name
+        output_path = output_subdir / image_path.name
 
         # Create visualization
         success = visualize_predictions(
@@ -250,11 +252,56 @@ def visualize_test_predictions(predictions_dict: Dict,
             success_count += 1
 
     if verbose:
-        print(f"\nVisualization complete!")
-        print(f"Successfully visualized: {success_count}/{len(test_predictions)} images")
-        print(f"Saved to: {test_output_dir}")
+        print(f"Successfully visualized: {success_count}/{len(dataset_predictions)} {dataset_type} images")
+        print(f"Saved to: {output_subdir}")
 
     return success_count
+
+
+def visualize_all_predictions(predictions_dict: Dict,
+                              train_image_dir: Path,
+                              test_image_dir: Path,
+                              output_dir: Path,
+                              verbose: bool = True) -> tuple:
+    """
+    Batch visualize all predictions for both train and test datasets.
+
+    Args:
+        predictions_dict: Dictionary mapping image names to prediction data
+                         Format: {img_name: {'filename': str,
+                                            'train_or_test': str,
+                                            'predictions': np.ndarray}}
+        train_image_dir: Directory containing train images
+        test_image_dir: Directory containing test images
+        output_dir: Base output directory (creates train/visualizations and test/visualizations subdirectories)
+        verbose: Print progress messages
+
+    Returns:
+        Tuple of (train_success_count, test_success_count)
+    """
+    output_dir = Path(output_dir)
+
+    # Visualize train images
+    train_viz_dir = output_dir / 'train' / 'visualizations'
+    train_count = visualize_dataset_predictions(
+        predictions_dict=predictions_dict,
+        image_dir=Path(train_image_dir),
+        output_subdir=train_viz_dir,
+        dataset_type='train',
+        verbose=verbose
+    )
+
+    # Visualize test images
+    test_viz_dir = output_dir / 'test' / 'visualizations'
+    test_count = visualize_dataset_predictions(
+        predictions_dict=predictions_dict,
+        image_dir=Path(test_image_dir),
+        output_subdir=test_viz_dir,
+        dataset_type='test',
+        verbose=verbose
+    )
+
+    return train_count, test_count
 
 
 def main():
