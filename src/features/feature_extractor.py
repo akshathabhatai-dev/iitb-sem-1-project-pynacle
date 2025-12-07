@@ -89,9 +89,9 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
         # hsv_features,      # 14
         hsv_hist_features, # 768
         lbp_features,      # 10
-        hog_features,      # 20/ 28512
+        hog_features,      # 576
         gabor_features,    # 20
-        glcm_features,     # 10
+        glcm_features,     # 12
         hu_moment_features, # 7
         sift_features,      # 640
         orb_features      # 320
@@ -127,10 +127,10 @@ def get_all_feature_names() -> List[str]:
     # all_names.extend(get_hsv_feature_names())    # 14
     all_names.extend(get_hsv_hist_feature_names())  # 768
     all_names.extend(get_lbp_feature_names())    # 10
-    all_names.extend(get_hog_feature_names())    # 20
+    all_names.extend(get_hog_feature_names())    # 576
     # all_names.extend(get_na_aware_hog_feature_names())    # 20
     all_names.extend(get_gabor_feature_names())  # 20
-    all_names.extend(get_glcm_feature_names())   # 10 / 12
+    all_names.extend(get_glcm_feature_names())   # 12
     all_names.extend(get_hu_moment_feature_names())   # 7
     all_names.extend(get_sift_feature_names(max_features=5))   # 640
     all_names.extend(get_orb_feature_names(max_features=10))   # 320
