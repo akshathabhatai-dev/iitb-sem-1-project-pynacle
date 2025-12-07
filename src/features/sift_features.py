@@ -5,48 +5,75 @@ from typing import List
 
 def extract_sift_features(cell_gray: np.ndarray, max_features=128) -> np.ndarray:
     """
-    Extract 14 RGB histogram-based features from a cell.
+    Extract a fixed-length SIFT descriptor vector from a grayscale image cell.
 
-    Features:
-        - 6 basic statistics: r_mean, g_mean, b_mean, r_std, g_std, b_std
-        - 3 channel ratios: r_ratio, g_ratio, b_ratio
-        - 1 dominant channel: which color is strongest (0=R, 1=G, 2=B)
-        - 1 color variance: uniformity of color
-        - 3 inter-channel differences: r_g_diff, r_b_diff, g_b_diff
+    WHAT THIS FUNCTION ACTUALLY DOES:
+    -------------------------------------------------------------
+    - Detects SIFT keypoints inside the cell
+    - Computes SIFT descriptors (each descriptor = 128 dimensions)
+    - Takes the first `max_features` descriptors
+    - Flattens them into a 1D vector
+    - Pads with zeros if fewer descriptors were detected
 
-    Args:
-        cell_rgb: RGB image cell of shape (H, W, 3)
+    FINAL FEATURE LENGTH:
+        max_features × 128
 
-    Returns:
-        Array of 14 features
+    Example:
+        max_features = 128  → 128 × 128 = **16384 features**
+
+    WHY ZERO-PADDING?
+    -------------------------------------------------------------
+    SIFT detects fewer keypoints in smooth or low-texture cells,
+    so padding ensures **every cell outputs a fixed-length feature vector**,
+    which is required for ML models and pipelines.
+
+    INPUT:
+        cell_gray : grayscale cell image (H × W)
+        max_features : maximum SIFT keypoints to include (default = 128)
+
+    OUTPUT:
+        np.ndarray of shape (max_features × 128,), dtype=float32
     """
-    # Extract channels
+
+    # Create SIFT detector
     sift = cv2.SIFT_create()
+
+    # Compute keypoints + descriptors
     kps, desc = sift.detectAndCompute(cell_gray, None)
 
+    # If no descriptors, return a zero vector
     if desc is None:
-        return np.zeros((max_features * 128,), dtype=np.float32)  # SIFT size=128
+        return np.zeros((max_features * 128,), dtype=np.float32)
 
-    desc = desc[:max_features]  # keep first N descriptors
+    # Keep only the first max_features descriptors
+    desc = desc[:max_features]
+
+    # Flatten descriptor matrix (N × 128 → 1D vector)
     desc = desc.flatten()
 
-    # pad if needed
-    # Pad if fewer than max_features
     expected_len = max_features * 128
+
+    # If fewer descriptors detected → pad with zeros
     if len(desc) < expected_len:
         desc = np.pad(desc, (0, expected_len - len(desc)))
-    features = desc.astype(np.float32)
 
+    return desc.astype(np.float32)
 
-    return features
 
 
 def get_sift_feature_names(max_features=128) -> List[str]:
     """
-    Get the names of SIFT features.
+    Generate feature names for SIFT descriptor features.
 
-    Returns:
-        List of 16384 feature names
+    TOTAL FEATURES:
+        max_features × 128
+
+    Example:
+        max_features = 128 → 16384 names:
+            sift_bin_0, sift_bin_1, ..., sift_bin_16383
+
+    OUTPUT:
+        List[str]: SIFT feature names
     """
-    
+
     return [f'sift_bin_{i}' for i in range(max_features * 128)]

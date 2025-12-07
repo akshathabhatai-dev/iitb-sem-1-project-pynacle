@@ -5,25 +5,33 @@ from typing import List
 
 def extract_hsv_hist_color_features(cell_hsv: np.ndarray) -> np.ndarray:
     """
-    Extract 14 HSV color features from a cell.
+    Extract a fixed-length **768-dimensional HSV histogram feature vector** 
+    from a single image cell.
 
     Features:
-        - 6 basic statistics: h_mean, s_mean, v_mean, h_std, s_std, v_std
-        - 4 hue histogram bins: red_pct, green_pct, blue_pct, brown_pct
-        - 1 high saturation percentage
-        - 1 color purity
-        - 2 max values: s_max, v_max
+        For HSV, we compute:
+            - 256-bin histogram for Hue channel
+            - 256-bin histogram for Saturation channel
+            - 256-bin histogram for Value channel
+
+        Total = 256 + 256 + 256 = **768 features**
 
     Args:
         cell_hsv: HSV image cell of shape (H, W, 3)
                  In OpenCV: H in [0, 180], S in [0, 255], V in [0, 255]
 
     Returns:
-        Array of 14 features
+        np.ndarray
+            768-dim array (float32), representing the concatenated histograms:
+                [Hue_256_bins, Saturation_256_bins, Value_256_bins]
     """
+    # Convert BGR input to HSV (ensures a consistent HSV representation)
     hsv = rgb_to_hsv(cell_hsv)
     hist_hsv = []
+
+    # Compute 256-bin histogram for each channel H, S, V
     for i in range(3):
+        # Histogram range is [0, 256] since OpenCV expects that format
         h = cv2.calcHist([hsv], [i], None, [256], [0, 256]).flatten()
         hist_hsv.extend(h)
 
@@ -47,10 +55,16 @@ def rgb_to_hsv(cell_rgb: np.ndarray) -> np.ndarray:
 
 def get_hsv_hist_feature_names() -> List[str]:
     """
-    Get the names of HSV features.
+    Returns the **names of all 768 HSV histogram features**.
+
+    Naming convention:
+        hsv_hist_bin_0
+        hsv_hist_bin_1
+        ...
+        hsv_hist_bin_767
 
     Returns:
-        List of 14 feature names
+        List[str] : 768 feature names
     """
     return [f'hsv_hist_bin_{i}' for i in range(768)]
 

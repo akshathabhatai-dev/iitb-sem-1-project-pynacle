@@ -24,7 +24,7 @@ def extract_glcm_features(cell_gray: np.ndarray, distances: List[int] = [1],
         angles: Angles in radians (default: [0, 45, 90, 135 degrees])
 
     Returns:
-        Array of 10 features
+        Array of 12 features
     """
     # Normalize grayscale to reduce number of levels (for faster computation)
     # Reduce from 256 levels to 32 levels
@@ -41,7 +41,7 @@ def extract_glcm_features(cell_gray: np.ndarray, distances: List[int] = [1],
             normed=True
         )
 
-        # Extract 5 properties
+        # Extract 6 properties
         contrast = graycoprops(glcm, 'contrast')
         dissimilarity = graycoprops(glcm, 'dissimilarity')
         homogeneity = graycoprops(glcm, 'homogeneity')
@@ -80,7 +80,7 @@ def get_glcm_feature_names() -> List[str]:
     Get the names of GLCM features.
 
     Returns:
-        List of 10 feature names
+        List of 12 feature names
     """
     properties = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
     names = []

@@ -5,48 +5,76 @@ from typing import List
 
 def extract_orb_features(cell_gray: np.ndarray, max_features=128) -> np.ndarray:
     """
-    Extract 14 RGB histogram-based features from a cell.
+    Extract a fixed-length ORB descriptor feature vector from a grayscale image cell.
 
-    Features:
-        - 6 basic statistics: r_mean, g_mean, b_mean, r_std, g_std, b_std
-        - 3 channel ratios: r_ratio, g_ratio, b_ratio
-        - 1 dominant channel: which color is strongest (0=R, 1=G, 2=B)
-        - 1 color variance: uniformity of color
-        - 3 inter-channel differences: r_g_diff, r_b_diff, g_b_diff
+    WHAT ORB PROVIDES:
+    ---------------------------------------------------------
+    ORB (Oriented FAST and Rotated BRIEF) computes:
+        - Keypoints (interest points)
+        - Binary descriptors (each descriptor = 32 bytes = 256 bits)
 
-    Args:
-        cell_rgb: RGB image cell of shape (H, W, 3)
+    THIS FUNCTION RETURNS:
+    ---------------------------------------------------------
+    A **flattened ORB descriptor vector of length:**
 
-    Returns:
-        Array of 14 features
+        max_features × 32
+
+    Example:
+        max_features = 128  → output = 128 × 32 = **4096 features**
+
+    The function ensures *fixed length* by:
+        - Taking only the first N descriptors
+        - Flattening into 1D
+        - Zero-padding if fewer than max_features are detected
+
+    INPUT:
+        cell_gray : grayscale cell (H × W)
+        max_features : maximum ORB keypoints/descriptors to include
+
+    OUTPUT:
+        features : np.ndarray of shape (max_features × 32,), dtype=float32
     """
-    # Extract channels
+
+    # Initialize ORB extractor
     orb = cv2.ORB_create(nfeatures=max_features)
+
+    # Detect keypoints + compute descriptors
     kps, desc = orb.detectAndCompute(cell_gray, None)
 
+    # If no descriptors found → return zero vector
     if desc is None:
-        return np.zeros((max_features * 32,), dtype=np.float32)  # ORB=32 dims
+        return np.zeros((max_features * 32,), dtype=np.float32)
 
+    # Keep only first max_features descriptors
     desc = desc[:max_features]
+
+    # Flatten N × 32 descriptor matrix → 1D vector
     desc = desc.flatten()
-    # Pad if fewer than max_features
+
+    # Expected final length
     expected_len = max_features * 32
+
+    # Pad with zeros if fewer descriptors were detected
     if len(desc) < expected_len:
         desc = np.pad(desc, (0, expected_len - len(desc)))
 
-    features = desc.astype(np.float32)
+    return desc.astype(np.float32)
 
-    return features
 
 
 def get_orb_feature_names(max_features=128) -> List[str]:
     """
-    Get the names of ORB features.
+    Generate feature names for ORB descriptors.
 
-    Returns:
-        List of 16384 feature names
+    Each ORB descriptor has 32 dimensions.
+    For max_features keypoints → total = max_features × 32 features.
+
+    Example:
+        max_features = 128 → 4096 feature names:
+            orb_bin_0, orb_bin_1, ..., orb_bin_4095
+
+    OUTPUT:
+        List[str] of length (max_features × 32)
     """
-    
+
     return [f'orb_bin_{i}' for i in range(max_features * 32)]
-
-
