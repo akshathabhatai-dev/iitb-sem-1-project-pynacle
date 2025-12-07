@@ -105,14 +105,18 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             cell_index_list.append(cell_idx)
     # Create DataFrame for easier analysis
 
-    feature_columns = (
-        [f"rgb_{i}" for i in range(14)] +
-        [f"hsv_{i}" for i in range(14)] +
-        [f"lbp_{i}" for i in range(10)] +
-        [f"hog_{i}" for i in range(576)] +
-        [f"gabor_{i}" for i in range(20)] +
-        [f"glcm_{i}" for i in range(10)]
-    )
+    # feature_columns = (
+    #     [f"rgb_{i}" for i in range(14)] +
+    #     [f"hsv_{i}" for i in range(14)] +
+    #     [f"lbp_{i}" for i in range(10)] +
+    #     [f"hog_{i}" for i in range(576)] +
+    #     [f"gabor_{i}" for i in range(20)] +
+    #     [f"glcm_{i}" for i in range(10)]
+    # )
+    num_features = len(X_list[0])   # auto-detect feature count
+
+    feature_columns = [f"f_{i}" for i in range(num_features)]   # auto column names
+
 
     columns = ["image_name", "cell_index", 'label'] + feature_columns
     df = pd.DataFrame(X_list, columns=feature_columns)

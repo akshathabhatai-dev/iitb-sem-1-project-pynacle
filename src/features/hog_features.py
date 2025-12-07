@@ -5,7 +5,10 @@ from typing import List
 
 def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
     """
-    Extract 576 HOG (Histogram of Oriented Gradients) features from a grayscale cell.
+    Extract 144 HOG (Histogram of Oriented Gradients) features from a grayscale cell.
+
+    REDUCED from 576 to 144 features to prevent HOG from dominating PCA.
+    With 698 total features, HOG was 82.5% - now will be 20.6%.
 
     HOG captures edge orientations and shape information.
     Useful for detecting:
@@ -14,19 +17,19 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
         - Circular ball (uniform gradient distribution)
 
     Features:
-        - 576 features from HOG descriptor
-        - For 75x100 cell: 5x5 cell grid -> 4x4 blocks -> 16 blocks * 36 features/block = 576
+        - 144 features from HOG descriptor
+        - For 75x100 cell: 3x3 cell grid -> 2x2 blocks -> 4 blocks * 36 features/block = 144
 
     Args:
         cell_gray: Grayscale image cell of shape (H, W)
                   Expected size: 75x100 pixels
 
     Returns:
-        Array of 576 features
+        Array of 144 features (REDUCED from 576)
     """
-    # HOG parameters
+    # HOG parameters - MODIFIED to reduce feature count
     orientations = 9          # Number of orientation bins (0-180° in 20° increments)
-    pixels_per_cell = (15, 20)  # Cell size (75/5=15, 100/5=20 for 5x5 grid)
+    pixels_per_cell = (25, 33)  # LARGER cells: 75/3=25, 100/3=33 for 3x3 grid (was 15,20)
     cells_per_block = (2, 2)  # Block normalization
 
     # Compute HOG descriptor
@@ -41,13 +44,13 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
             feature_vector=True
         )
 
-        # For 75x100 cells, this will always be 576 features
+        # For 75x100 cells with new parameters, this will be 144 features
         features = hog_descriptor
 
     except Exception as e:
         # If HOG fails (e.g., image too small), return zeros
         print(f"HOG extraction failed: {e}")
-        features = np.zeros(576, dtype=np.float32)
+        features = np.zeros(144, dtype=np.float32)
 
     return features.astype(np.float32)
 
@@ -98,6 +101,6 @@ def get_hog_feature_names() -> List[str]:
     Get the names of HOG features.
 
     Returns:
-        List of 576 feature names
+        List of 144 feature names (REDUCED from 576)
     """
-    return [f'hog_{i}' for i in range(576)]
+    return [f'hog_{i}' for i in range(144)]
