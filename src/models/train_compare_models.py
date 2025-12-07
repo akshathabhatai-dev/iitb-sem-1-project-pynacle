@@ -85,8 +85,8 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
 
         # Create pipeline with scaling and PCA (scale before PCA!)
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 multi_class='multinomial',
                 class_weight='balanced',
@@ -114,8 +114,8 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 C=1.0,
                 penalty='l2',
@@ -169,9 +169,15 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
 def train_random_forest(X: np.ndarray, y: np.ndarray,
                        tune_hyperparameters: bool = True,
                        cv_folds: int = 5,
-                       verbose: bool = True) -> Tuple[RandomForestClassifier, Dict]:
+                       verbose: bool = True) -> Tuple[Pipeline, Dict]:
     """
-    Train Random Forest classifier.
+    Train Random Forest classifier with PCA preprocessing.
+
+    Note: With 431 features, PCA is essential for Random Forest to:
+    - Reduce dimensionality and prevent overfitting
+    - Speed up training time
+    - Improve generalization performance
+    - StandardScaler is required before PCA for proper variance scaling
 
     Args:
         X: Training features (n_samples, n_features)
@@ -181,7 +187,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
         verbose: Print training progress
 
     Returns:
-        Tuple of (trained_model, metrics_dict)
+        Tuple of (trained_pipeline, metrics_dict)
     """
     if verbose:
         print("\n" + "="*70)
@@ -193,20 +199,25 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
     if tune_hyperparameters:
         # Hyperparameter grid (from existing train.py)
         param_grid = {
-            'n_estimators': [100, 200, 300],
-            'max_depth': [15, 20, 25],
-            'min_samples_split': [5, 10, 15],
-            'min_samples_leaf': [2, 5, 10]
+            'classifier__n_estimators': [100, 200, 300],
+            'classifier__max_depth': [15, 20, 25],
+            'classifier__min_samples_split': [5, 10, 15],
+            'classifier__min_samples_leaf': [2, 5, 10]
         }
 
-        base_model = RandomForestClassifier(
-            class_weight='balanced',
-            random_state=RANDOM_STATE,
-            n_jobs=-1
-        )
+        # Create pipeline with scaling and PCA
+        pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', RandomForestClassifier(
+                class_weight='balanced',
+                random_state=RANDOM_STATE,
+                n_jobs=-1
+            ))
+        ])
 
         grid_search = GridSearchCV(
-            base_model, param_grid,
+            pipeline, param_grid,
             cv=cv_folds,
             scoring=CV_SCORING_METRIC,
             n_jobs=-1,
@@ -214,7 +225,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
         )
 
         grid_search.fit(X, y)
-        best_model = grid_search.best_estimator_
+        best_pipeline = grid_search.best_estimator_
 
         if verbose:
             print(f"Best parameters: {grid_search.best_params_}")
@@ -222,22 +233,27 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        best_model = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=20,
-            min_samples_split=10,
-            min_samples_leaf=5,
-            class_weight='balanced',
-            random_state=RANDOM_STATE,
-            n_jobs=-1
-        )
+        pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', RandomForestClassifier(
+                n_estimators=200,
+                max_depth=20,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                class_weight='balanced',
+                random_state=RANDOM_STATE,
+                n_jobs=-1
+            ))
+        ])
 
-        best_model.fit(X, y)
+        pipeline.fit(X, y)
+        best_pipeline = pipeline
 
     # Cross-validation evaluation
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
-        best_model, X, y,
+        best_pipeline, X, y,
         cv=cv,
         scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
@@ -266,7 +282,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
         print(f"  Recall:    {metrics['recall_macro_mean']:.4f} (+/- {metrics['recall_macro_std']:.4f})")
         print(f"  Train Time: {train_time:.2f}s")
 
-    return best_model, metrics
+    return best_pipeline, metrics
 
 
 def train_svm(X: np.ndarray, y: np.ndarray,
@@ -302,8 +318,8 @@ def train_svm(X: np.ndarray, y: np.ndarray,
         }
 
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', SVC(
                 class_weight='balanced',
                 random_state=RANDOM_STATE,
@@ -329,8 +345,8 @@ def train_svm(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', SVC(
                 C=1.0,
                 kernel='rbf',
@@ -412,8 +428,8 @@ def train_knn(X: np.ndarray, y: np.ndarray,
         }
 
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', KNeighborsClassifier(n_jobs=-1))
         ])
 
@@ -435,8 +451,8 @@ def train_knn(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', KNeighborsClassifier(
                 n_neighbors=5,
                 weights='distance',
@@ -523,8 +539,8 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         }
 
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', xgb.XGBClassifier(
                 objective='multi:softmax',
                 num_class=len(classes),
@@ -552,8 +568,8 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', xgb.XGBClassifier(
                 n_estimators=200,
                 max_depth=5,

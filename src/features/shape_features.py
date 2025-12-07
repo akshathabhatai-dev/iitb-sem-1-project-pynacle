@@ -1,16 +1,20 @@
 """
 Shape-Based Features for Cricket Object Detection
 
-This module extracts 24 shape and contour features specifically designed for
+This module extracts 35 shape and contour features specifically designed for
 discriminating between ball (circular), bat (elongated), and stump (vertical).
 
 Features breakdown:
 - Contour Analysis (12): Shape properties from largest contour
 - Hu Moments (7): Scale/rotation-invariant shape descriptors
 - Bounding Box (5): Aspect ratio and spatial properties
+- Minimum Enclosing Circle (4): PHASE 4B - Ball discrimination via fill ratio
+- Convexity Defects (4): PHASE 4B - Smooth vs elongated shape detection
+- Polygon Approximation (3): PHASE 4B - Shape complexity analysis
 
 Author: Pynacle Team
 Date: 2025
+Phase: Enhanced with Phase 4B features
 """
 
 import numpy as np
@@ -20,23 +24,28 @@ from typing import List
 
 def extract_shape_features(cell_rgb: np.ndarray) -> np.ndarray:
     """
-    Extract 24 shape-based features from RGB cell.
+    Extract 35 shape-based features from RGB cell (PHASE 4B Enhanced).
 
     Critical for object discrimination:
-    - Ball: Circularity ~ 1.0, Aspect ratio ~ 1.0
-    - Bat: Low circularity, Aspect ratio > 2.0 (elongated horizontally)
-    - Stump: Low circularity, Aspect ratio < 0.5 (elongated vertically)
+    - Ball: Circularity ~ 1.0, Aspect ratio ~ 1.0, High min circle fill ratio (>0.75)
+    - Bat: Low circularity, Aspect ratio > 2.0 (elongated horizontally), Few convexity defects
+    - Stump: Low circularity, Aspect ratio < 0.5 (elongated vertically), Few convexity defects
+
+    Phase 4B adds:
+    - Minimum Enclosing Circle (4): Critical for ball vs elongated shapes
+    - Convexity Defects (4): Smooth ball (0 defects) vs elongated bat/stump
+    - Polygon Approximation (3): Shape complexity (ball = many vertices, bat/stump = few)
 
     Args:
         cell_rgb: RGB image cell of shape (H, W, 3) in BGR format
                  Expected size: 75x100 pixels
 
     Returns:
-        Array of 24 float32 features
+        Array of 35 float32 features (24 original + 11 Phase 4B)
     """
     # Handle empty or invalid images
     if cell_rgb.size == 0:
-        return np.zeros(24, dtype=np.float32)
+        return np.zeros(35, dtype=np.float32)
 
     # Convert to grayscale for contour detection
     cell_gray = cv2.cvtColor(cell_rgb, cv2.COLOR_BGR2GRAY)
@@ -218,6 +227,155 @@ def extract_shape_features(cell_rgb: np.ndarray) -> np.ndarray:
         bbox_area = 100.0 * 75.0
         bbox_fill_ratio = 0.0
 
+    # ========== MINIMUM ENCLOSING CIRCLE (4 features) - PHASE 4B ==========
+    # CRITICAL for ball detection: Ball has high circle fill ratio (>0.75)
+    # Bat/Stump have low fill ratio (<0.3) since they're elongated
+
+    if len(contours) > 0:
+        # Find minimum enclosing circle for largest contour
+        (min_circle_x, min_circle_y), min_circle_radius = cv2.minEnclosingCircle(largest_contour)
+
+        # 25. Minimum circle radius
+        # Ball: radius ~ 10-25 pixels
+        # Bat/Stump: larger radius (encloses elongated shape)
+        min_enclosing_circle_radius = float(min_circle_radius)
+
+        # 26. Minimum circle area
+        min_circle_area = np.pi * (min_circle_radius ** 2)
+
+        # 27. Minimum circle fill ratio = contour_area / circle_area
+        # CRITICAL DISCRIMINATOR:
+        # Ball: >0.75 (compact circular object fills the circle)
+        # Bat: <0.3 (elongated, leaves much of circle empty)
+        # Stump: <0.3 (elongated vertically)
+        if min_circle_area > 0:
+            min_circle_fill_ratio = largest_contour_area / min_circle_area
+        else:
+            min_circle_fill_ratio = 0.0
+
+        # 28. Circle-to-bbox ratio = circle_radius / max(bbox_width, bbox_height)
+        # Measures how much the enclosing circle differs from bounding box
+        # Ball: ratio ~ 0.5-0.7 (circle ≈ bbox)
+        # Bat/Stump: ratio > 1.0 (circle much larger than one dimension)
+        if max(bbox_width, bbox_height) > 0:
+            circle_to_bbox_ratio = min_circle_radius / max(bbox_width, bbox_height)
+        else:
+            circle_to_bbox_ratio = 0.0
+
+    else:
+        min_enclosing_circle_radius = 0.0
+        min_circle_area = 0.0
+        min_circle_fill_ratio = 0.0
+        circle_to_bbox_ratio = 0.0
+
+    # ========== CONVEXITY DEFECTS (4 features) - PHASE 4B ==========
+    # CRITICAL for smooth vs elongated shape detection:
+    # Ball: 0 convexity defects (perfectly smooth, convex)
+    # Bat: few defects at ends (mostly convex)
+    # Stump: few defects (stick-like shape)
+
+    if len(contours) > 0 and len(largest_contour) > 3:
+        # Convexity defects require convex hull
+        hull_indices = cv2.convexHull(largest_contour, returnPoints=False)
+
+        if hull_indices is not None and len(hull_indices) > 3:
+            try:
+                defects = cv2.convexityDefects(largest_contour, hull_indices)
+
+                if defects is not None:
+                    # 29. Number of convexity defects
+                    # Ball: 0 (smooth contour)
+                    # Bat/Stump: 0-2 (mostly convex stick-like shapes)
+                    # Complex shapes: >3
+                    num_convexity_defects = len(defects)
+
+                    # Extract defect depths (distance from contour to hull)
+                    defect_depths = defects[:, 0, 3] / 256.0  # OpenCV stores depth as int*256
+
+                    # 30. Max convexity defect depth
+                    # Larger depth = more concave
+                    max_defect_depth = float(np.max(defect_depths))
+
+                    # 31. Mean convexity defect depth
+                    mean_defect_depth = float(np.mean(defect_depths))
+
+                    # 32. Convexity defect area ratio
+                    # = sum(defect_areas) / contour_area
+                    # Approximation: defect area ≈ depth * base
+                    # Higher ratio = more concavity
+                    total_defect_area = np.sum(defect_depths)
+                    if largest_contour_area > 0:
+                        convexity_defect_area_ratio = total_defect_area / largest_contour_area
+                    else:
+                        convexity_defect_area_ratio = 0.0
+
+                else:
+                    # No defects detected (perfect convex hull = contour)
+                    num_convexity_defects = 0
+                    max_defect_depth = 0.0
+                    mean_defect_depth = 0.0
+                    convexity_defect_area_ratio = 0.0
+
+            except cv2.error:
+                # Error in computing defects (e.g., insufficient points)
+                num_convexity_defects = 0
+                max_defect_depth = 0.0
+                mean_defect_depth = 0.0
+                convexity_defect_area_ratio = 0.0
+        else:
+            # Insufficient hull points
+            num_convexity_defects = 0
+            max_defect_depth = 0.0
+            mean_defect_depth = 0.0
+            convexity_defect_area_ratio = 0.0
+    else:
+        # No contours or too few points
+        num_convexity_defects = 0
+        max_defect_depth = 0.0
+        mean_defect_depth = 0.0
+        convexity_defect_area_ratio = 0.0
+
+    # ========== POLYGON APPROXIMATION (3 features) - PHASE 4B ==========
+    # Approximates contour as polygon with fewer vertices
+    # Ball: Cannot be approximated well (many vertices needed for circle)
+    # Bat/Stump: Can be approximated with 4-6 vertices (rectangle-like)
+
+    if len(contours) > 0:
+        # Douglas-Peucker algorithm with epsilon = 2% of perimeter
+        epsilon = 0.02 * largest_contour_perimeter
+        approx_polygon = cv2.approxPolyDP(largest_contour, epsilon, True)
+
+        # 33. Polygon vertex count
+        # Ball: high count (circle needs many vertices)
+        # Rectangle: 4 vertices
+        # Triangle: 3 vertices
+        polygon_vertex_count = len(approx_polygon)
+
+        # 34. Polygon approximation error
+        # = perimeter(approx_polygon) / perimeter(original_contour)
+        # Ball: high error (poor approximation)
+        # Rectangle: low error (good approximation)
+        approx_perimeter = cv2.arcLength(approx_polygon, True)
+        if largest_contour_perimeter > 0:
+            polygon_approx_error = abs(approx_perimeter - largest_contour_perimeter) / largest_contour_perimeter
+        else:
+            polygon_approx_error = 0.0
+
+        # 35. Polygon compactness
+        # = 4π × area / perimeter² of approximated polygon
+        # Similar to circularity but for simplified shape
+        approx_area = cv2.contourArea(approx_polygon)
+        if approx_perimeter > 0:
+            polygon_compactness = (4.0 * np.pi * approx_area) / (approx_perimeter ** 2)
+            polygon_compactness = min(polygon_compactness, 1.0)
+        else:
+            polygon_compactness = 0.0
+
+    else:
+        polygon_vertex_count = 0
+        polygon_approx_error = 0.0
+        polygon_compactness = 0.0
+
     # ========== COMBINE ALL FEATURES ==========
     features = np.array([
         # Contour Analysis (12)
@@ -242,11 +400,28 @@ def extract_shape_features(cell_rgb: np.ndarray) -> np.ndarray:
         bbox_height,
         bbox_aspect_ratio,
         bbox_area,
-        bbox_fill_ratio
+        bbox_fill_ratio,
+
+        # Minimum Enclosing Circle (4) - PHASE 4B
+        min_enclosing_circle_radius,
+        min_circle_area,
+        min_circle_fill_ratio,
+        circle_to_bbox_ratio,
+
+        # Convexity Defects (4) - PHASE 4B
+        num_convexity_defects,
+        max_defect_depth,
+        mean_defect_depth,
+        convexity_defect_area_ratio,
+
+        # Polygon Approximation (3) - PHASE 4B
+        polygon_vertex_count,
+        polygon_approx_error,
+        polygon_compactness
     ], dtype=np.float32)
 
-    # Verify we have exactly 24 features
-    assert len(features) == 24, f"Expected 24 features, got {len(features)}"
+    # Verify we have exactly 35 features (24 original + 11 Phase 4B)
+    assert len(features) == 35, f"Expected 35 features, got {len(features)}"
 
     # Replace any NaN or Inf values with 0.0 (defensive programming)
     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
@@ -256,10 +431,10 @@ def extract_shape_features(cell_rgb: np.ndarray) -> np.ndarray:
 
 def get_shape_feature_names() -> List[str]:
     """
-    Get names of all 24 shape features.
+    Get names of all 35 shape features (PHASE 4B Enhanced).
 
     Returns:
-        List of 24 feature names
+        List of 35 feature names (24 original + 11 Phase 4B)
     """
     names = [
         # Contour Analysis (12)
@@ -290,10 +465,27 @@ def get_shape_feature_names() -> List[str]:
         'bbox_height',
         'bbox_aspect_ratio',
         'bbox_area',
-        'bbox_fill_ratio'
+        'bbox_fill_ratio',
+
+        # Minimum Enclosing Circle (4) - PHASE 4B
+        'min_enclosing_circle_radius',
+        'min_circle_area',
+        'min_circle_fill_ratio',
+        'circle_to_bbox_ratio',
+
+        # Convexity Defects (4) - PHASE 4B
+        'num_convexity_defects',
+        'max_defect_depth',
+        'mean_defect_depth',
+        'convexity_defect_area_ratio',
+
+        # Polygon Approximation (3) - PHASE 4B
+        'polygon_vertex_count',
+        'polygon_approx_error',
+        'polygon_compactness'
     ]
 
-    assert len(names) == 24, f"Expected 24 feature names, got {len(names)}"
+    assert len(names) == 35, f"Expected 35 feature names, got {len(names)}"
 
     return names
 
