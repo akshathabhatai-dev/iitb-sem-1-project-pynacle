@@ -14,8 +14,6 @@ import os
 
 from src.models.train import train_xgboost
 
-# from src.features.feature_extractor import get_all_feature_names
-
 # Add src directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'features'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
@@ -98,11 +96,12 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
         # Divide into grid
         cells = divide_into_grid(img, grid_size=(8, 8))
 
-        hog_na_list = extract_hog_per_cell(cells)
+        # hog_na_list = extract_hog_per_cell(cells)
 
         # Extract features from each cell
         for cell_idx, cell in enumerate(cells):
-            features = extract_features_from_cell(cell, na_hog_vector=hog_na_list[cell_idx])
+            # features = extract_features_from_cell(cell, na_hog_vector=hog_na_list[cell_idx]) # to enable NA-HOG
+            features = extract_features_from_cell(cell)  # without NA-HOG
             label = labels_dict[img_name][cell_idx]
 
             X_list.append(features)
@@ -110,15 +109,6 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             image_names_list.append(img_name)
             cell_index_list.append(cell_idx)
     # Create DataFrame for easier analysis
-
-    # feature_columns = (
-    #     [f"rgb_{i}" for i in range(14)] +
-    #     [f"hsv_{i}" for i in range(14)] +
-    #     [f"lbp_{i}" for i in range(10)] +
-    #     [f"hog_{i}" for i in range(20)] +
-    #     [f"gabor_{i}" for i in range(20)] +
-    #     [f"glcm_{i}" for i in range(10)]
-    # )
     feature_columns = get_all_feature_names()
 
     columns = ["image_name", "cell_index", 'label'] + feature_columns
@@ -233,8 +223,6 @@ def main():
         # Extract features
         X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df)
 
-        # X_train, y_train = select_balanced_data(X_train, y_train, under_sample_size=800, over_sample_size=600, seed=111)
-
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
 
@@ -332,24 +320,6 @@ def main():
         print("\n[2/4] MODEL TRAINING")
         print("-"*70)
 
-        # model = train_random_forest(
-        #     X_train, y_train,
-        #     tune_hyperparameters=args.tune,
-        #     verbose=True
-        # )
-
-        # if args.model == 'random_forest':
-        #     model = train_random_forest(
-        #         X_train, y_train,
-        #         tune_hyperparameters=args.tune,
-        #         verbose=True
-        #     )
-        # else:
-        #     model = train_xgboost(
-        #         X_train, y_train,
-        #         tune_hyperparameters=args.tune,
-        #         verbose=True
-        #     )
         if args.compare_models:
             # Compare all 5 models and select best
             print("Model comparison mode enabled - training all 5 models...")
@@ -428,7 +398,7 @@ def main():
                             save_path=output_dir / 'confusion_matrix.png')
 
     # PREDICT MODE
-    if False and args.mode in ['full', 'predict']:
+    if args.mode in ['full', 'predict']:
         print("\n[4/4] GENERATING PREDICTIONS")
         print("-"*70)
 

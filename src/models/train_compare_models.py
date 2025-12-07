@@ -321,21 +321,6 @@ def train_svm(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        # pipeline = Pipeline([
-        #     ('scaler', StandardScaler()),
-        #     ('classifier', SVC(
-        #         C=1.0,
-        #         kernel='rbf',
-        #         gamma='scale',
-        #         class_weight='balanced',
-        #         random_state=42,
-        #         max_iter=5000
-        #     ))
-        # ])
-
-        # pipeline.fit(X, y)
-        # best_pipeline = pipeline
-
         best_pipeline = SVC(
                 C=1.0,
                 kernel='rbf',
@@ -435,20 +420,6 @@ def train_knn(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        # pipeline = Pipeline([
-        #     ('scaler', StandardScaler()),
-        #     ('pca', PCA(n_components=1.0, svd_solver='full')),
-        #     ('classifier', KNeighborsClassifier(
-        #         n_neighbors=5,
-        #         weights='distance',
-        #         metric='euclidean',
-        #         n_jobs=-1
-        #     ))
-        # ])
-
-        # pipeline.fit(X, y)
-        # best_pipeline = pipeline
-
         best_pipeline = KNeighborsClassifier(
                 n_neighbors=5,
                 weights='distance',
@@ -456,13 +427,6 @@ def train_knn(X: np.ndarray, y: np.ndarray,
                 n_jobs=-1
             )
         best_pipeline.fit(X, y)
-
-        # if verbose:
-        #     pca_step = pipeline.named_steps['pca']
-        #     # print(f"Output shape: {X_pca.shape}")
-        #     print(f"Components retained: {pca_step.n_components_}")
-        #     print(f"Explained variance sum: {pca_step.explained_variance_ratio_.sum():.5f}")
-        #     print("="*70)
 
     # Cross-validation evaluation
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
@@ -576,49 +540,7 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
             eval_metric='mlogloss'
         )
         best_model.fit(X, y, sample_weight=sample_weights)
-        # Default parameters
-        # pipeline = Pipeline([
-        #     ('scaler', StandardScaler()),
-        #     ('pca', PCA(n_components=None, svd_solver='full')),
-        #     ('classifier', xgb.XGBClassifier(
-        #         n_estimators=200,
-        #         max_depth=5,
-        #         learning_rate=0.1,
-        #         subsample=0.8,
-        #         colsample_bytree=0.8,
-        #         objective='multi:softmax',
-        #         num_class=len(classes),
-        #         random_state=42,
-        #         n_jobs=-1,
-        #         eval_metric='mlogloss'
-        #     ))
-        # ])
-
-        # pipeline = Pipeline([
-        #     ('scaler', StandardScaler()),
-        #     ('pca', PCA(n_components=0.999, svd_solver='full')),
-        #     ('classifier', xgb.XGBClassifier(
-        #         n_estimators=300,
-        #         learning_rate=0.05,
-        #         max_depth=5,
-        #         subsample=0.7,
-        #         colsample_bytree=0.5,
-        #         min_child_weight=3,
-        #         gamma=0.5,
-        #         random_state=42,
-        #         n_jobs=-1
-        #     ))
-        # ])
-
-        # pipeline.fit(X, y, classifier__sample_weight=sample_weights)
-        # best_model = pipeline
-        # if verbose:
-        #     pca_step = pipeline.named_steps['pca']
-        #     # print(f"Output shape: {X_pca.shape}")
-        #     print(f"Components retained: {pca_step.n_components_}")
-        #     print(f"Explained variance sum: {pca_step.explained_variance_ratio_.sum():.5f}")
-        #     print("="*70)
-
+        
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
     cv_results = cross_validate(

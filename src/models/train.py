@@ -339,26 +339,12 @@ def main():
     X_train, y_train = load_training_data(args.features, args.labels)
 
     # Train model
-    # model = train_random_forest(
-    #     X_train, y_train,
-    #     tune_hyperparameters=args.tune,
-    #     cv_folds=args.cv_folds,
-    #     verbose=True
-    # )
-    if args.model == 'rf':
-        model = train_random_forest(
-            X_train, y_train,
-            tune_hyperparameters=args.tune,
-            cv_folds=args.cv_folds,
-            verbose=True
-        )
-    else:
-        model = train_xgboost(
-            X_train, y_train,
-            tune_hyperparameters=args.tune,
-            cv_folds=args.cv_folds,
-            verbose=True
-        )
+    model = train_random_forest(
+        X_train, y_train,
+        tune_hyperparameters=args.tune,
+        cv_folds=args.cv_folds,
+        verbose=True
+    )
 
     # Save model
     save_model(model, args.output)
