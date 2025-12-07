@@ -17,7 +17,7 @@ from glcm_features import extract_glcm_features, get_glcm_feature_names
 
 def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
     """
-    Extract all 88 features from a single RGB cell.
+    Extract all 644 features from a single RGB cell.
 
     Feature breakdown:
         - RGB Histogram: 14 features
@@ -33,7 +33,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
                  Expected size: 75x100 pixels
 
     Returns:
-        Array of 88 features
+        Array of 644 features
     """
     # ========== COLOR FEATURES (28 total) ==========
 
@@ -66,34 +66,34 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
         rgb_features,      # 14
         hsv_features,      # 14
         lbp_features,      # 10
-        hog_features,      # 20
+        hog_features,      # 576
         gabor_features,    # 20
         glcm_features      # 10
     ])
 
-    # Verify we have exactly 88 features
-    assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
+    # Verify we have exactly 644 features
+    assert len(all_features) == 644, f"Expected 644 features, got {len(all_features)}"
 
     return all_features.astype(np.float32)
 
 
 def get_all_feature_names() -> List[str]:
     """
-    Get names of all 88 features.
+    Get names of all 644 features.
 
     Returns:
-        List of 88 feature names
+        List of 644 feature names
     """
     all_names = []
 
     all_names.extend(get_rgb_feature_names())    # 14
     all_names.extend(get_hsv_feature_names())    # 14
     all_names.extend(get_lbp_feature_names())    # 10
-    all_names.extend(get_hog_feature_names())    # 20
+    all_names.extend(get_hog_feature_names())    # 576
     all_names.extend(get_gabor_feature_names())  # 20
     all_names.extend(get_glcm_feature_names())   # 10
 
-    assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
+    assert len(all_names) == 644, f"Expected 644 feature names, got {len(all_names)}"
 
     return all_names
 

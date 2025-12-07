@@ -5,7 +5,7 @@ from typing import List
 
 def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
     """
-    Extract 20 HOG (Histogram of Oriented Gradients) features from a grayscale cell.
+    Extract 576 HOG (Histogram of Oriented Gradients) features from a grayscale cell.
 
     HOG captures edge orientations and shape information.
     Useful for detecting:
@@ -14,14 +14,15 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
         - Circular ball (uniform gradient distribution)
 
     Features:
-        - 20 features from HOG descriptor
+        - 576 features from HOG descriptor
+        - For 75x100 cell: 5x5 cell grid -> 4x4 blocks -> 16 blocks * 36 features/block = 576
 
     Args:
         cell_gray: Grayscale image cell of shape (H, W)
                   Expected size: 75x100 pixels
 
     Returns:
-        Array of 20 features
+        Array of 576 features
     """
     # HOG parameters
     orientations = 9          # Number of orientation bins (0-180° in 20° increments)
@@ -40,20 +41,13 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
             feature_vector=True
         )
 
-        # The HOG descriptor may have variable length
-        # We need exactly 20 features
-        if len(hog_descriptor) >= 20:
-            # Take first 20 components
-            features = hog_descriptor[:20]
-        else:
-            # Pad with zeros if less than 20
-            features = np.zeros(20, dtype=np.float32)
-            features[:len(hog_descriptor)] = hog_descriptor
+        # For 75x100 cells, this will always be 576 features
+        features = hog_descriptor
 
     except Exception as e:
         # If HOG fails (e.g., image too small), return zeros
         print(f"HOG extraction failed: {e}")
-        features = np.zeros(20, dtype=np.float32)
+        features = np.zeros(576, dtype=np.float32)
 
     return features.astype(np.float32)
 
@@ -104,6 +98,6 @@ def get_hog_feature_names() -> List[str]:
     Get the names of HOG features.
 
     Returns:
-        List of 20 feature names
+        List of 576 feature names
     """
-    return [f'hog_{i}' for i in range(20)]
+    return [f'hog_{i}' for i in range(576)]

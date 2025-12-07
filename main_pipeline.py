@@ -109,7 +109,7 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
         [f"rgb_{i}" for i in range(14)] +
         [f"hsv_{i}" for i in range(14)] +
         [f"lbp_{i}" for i in range(10)] +
-        [f"hog_{i}" for i in range(20)] +
+        [f"hog_{i}" for i in range(576)] +
         [f"gabor_{i}" for i in range(20)] +
         [f"glcm_{i}" for i in range(10)]
     )
