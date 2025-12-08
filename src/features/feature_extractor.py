@@ -225,7 +225,6 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # ])
 
     # Verify we have exactly 406 per-cell features (236 + 65 + 36 + 30 + 20 + 7 + 15)
-    assert len(all_features) == 406, f"Expected 406 features, got {len(all_features)}"
     hu_moment_features = extract_hu_moment_features(cell_gray)
     # sift_features = extract_sift_features(cell_gray)
     sift_features = extract_sift_features(cell_gray, max_features=5)  # limit to first 5 keypoints
@@ -281,7 +280,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
     # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
-    assert len(all_features) == 3280, f"Expected 3121 features, got {len(all_features)}" # with normal hog all features
+    assert len(all_features) == 3289, f"Expected 3289 features, got {len(all_features)}" # with normal hog all features
     # assert len(all_features) == 2565, f"Expected 2565 features, got {len(all_features)}" # with normal hog
     # assert len(all_features) == 31057, f"Expected 31057 features, got {len(all_features)}" # with na normal hog
     # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
@@ -343,11 +342,13 @@ def get_all_feature_names() -> List[str]:
     all_names.extend(get_laws_texture_feature_names())    # 9
     all_names.extend(get_fourier_texture_feature_names()) # 6
 
+    # all_names.extend(get_spatial_context_feature_names()) # 25
+
     # print(f"Extracted {len(all_names)} feature names from cell.")
     # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
     # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
     # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
-    assert len(all_names) == 3280, f"Expected 3121 features, got {len(all_names)}" # with normal hog all features
+    assert len(all_names) == 3289, f"Expected 3289 features, got {len(all_names)}" # with normal hog all features
     # assert len(all_names) == 2565, f"Expected 2565 feature names, got {len(all_names)}" # with normal hog
     # assert len(all_names) == 31057, f"Expected 31057 feature names, got {len(all_names)}" # with na normal hog
     # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"

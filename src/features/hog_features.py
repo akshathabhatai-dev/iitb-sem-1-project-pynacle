@@ -5,10 +5,7 @@ from typing import List
 
 def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
     """
-    Extract 144 HOG (Histogram of Oriented Gradients) features from a grayscale cell.
-
-    REDUCED from 576 to 144 features to prevent HOG from dominating PCA.
-    With 698 total features, HOG was 82.5% - now will be 20.6%.
+    Extract 20 HOG (Histogram of Oriented Gradients) features from a grayscale cell.
 
     HOG captures edge orientations and shape information.
     Useful for detecting:
@@ -17,8 +14,7 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
         - Circular ball (uniform gradient distribution)
 
     Features:
-        - 144 features from HOG descriptor
-        - For 75x100 cell: 3x3 cell grid -> 2x2 blocks -> 4 blocks * 36 features/block = 144
+        - 20 features from HOG descriptor
 
     Args:
         cell_gray: Grayscale image cell of shape (H, W)
@@ -27,9 +23,9 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
     Returns:
         Array of 576 features
     """
-    # HOG parameters - MODIFIED to reduce feature count
+    # HOG parameters
     orientations = 9          # Number of orientation bins (0-180° in 20° increments)
-    pixels_per_cell = (25, 33)  # LARGER cells: 75/3=25, 100/3=33 for 3x3 grid (was 15,20)
+    pixels_per_cell = (15, 20)  # Cell size (75/5=15, 100/5=20 for 5x5 grid)
     cells_per_block = (2, 2)  # Block normalization
     number_of_features = 576
 
