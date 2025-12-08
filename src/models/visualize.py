@@ -261,6 +261,7 @@ def visualize_dataset_predictions(predictions_dict: Dict,
 def visualize_all_predictions(predictions_dict: Dict,
                               train_image_dir: Path,
                               test_image_dir: Path,
+                              validate_image_dir: Path,
                               output_dir: Path,
                               verbose: bool = True) -> tuple:
     """
@@ -301,7 +302,17 @@ def visualize_all_predictions(predictions_dict: Dict,
         verbose=verbose
     )
 
-    return train_count, test_count
+    # Visualize validate images
+    validate_viz_dir = output_dir / 'validate' / 'visualizations'
+    validate_count = visualize_dataset_predictions(
+        predictions_dict=predictions_dict,
+        image_dir=Path(validate_image_dir),
+        output_subdir=validate_viz_dir,
+        dataset_type='validate',
+        verbose=verbose
+    )
+
+    return train_count, test_count, validate_count
 
 
 def main():

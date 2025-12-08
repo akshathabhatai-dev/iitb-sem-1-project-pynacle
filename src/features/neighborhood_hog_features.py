@@ -36,6 +36,7 @@ def compute_hog_per_cell(
     hog_list = []
 
     for gray in gray_cells:
+        
         h = hog(
             gray,
             orientations=orientations,
@@ -154,7 +155,9 @@ def compute_hog_dim_per_cell(
 # -------------------------------------------------------------
 # 5. Generate Feature Names for NA-HOG
 # -------------------------------------------------------------
-def get_na_aware_hog_feature_names(neighbor_count=8) -> List[str]:
+def get_na_aware_hog_feature_names(neighbor_count=8, orientations=9,
+        pixels_per_cell=(8, 8),
+        cells_per_block=(2, 2)) -> List[str]:
     """
     Generate feature names for Neighborhood-Aware HOG.
 
@@ -170,5 +173,5 @@ def get_na_aware_hog_feature_names(neighbor_count=8) -> List[str]:
             na_hog_bin_0 ... na_hog_bin_N
     """
 
-    na_hog_dim = compute_hog_dim_per_cell() * (1 + neighbor_count)
+    na_hog_dim = compute_hog_dim_per_cell(orientations= orientations, pixels_per_cell=pixels_per_cell, cells_per_block=cells_per_block) * (1 + neighbor_count)
     return [f'na_hog_bin_{i}' for i in range(na_hog_dim)]

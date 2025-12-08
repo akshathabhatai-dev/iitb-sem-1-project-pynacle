@@ -527,19 +527,51 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        best_model = xgb.XGBClassifier(
-            n_estimators=200,
-            max_depth=5,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            objective='multi:softmax',
-            num_class=len(classes),
-            random_state=42,
-            n_jobs=-1,
-            eval_metric='mlogloss'
-        )
-        best_model.fit(X, y, sample_weight=sample_weights)
+        # best_model = xgb.XGBClassifier(
+        #     n_estimators=200,
+        #     max_depth=5,
+        #     learning_rate=0.1,
+        #     subsample=0.8,
+        #     colsample_bytree=0.8,
+        #     objective='multi:softmax',
+        #     num_class=len(classes),
+        #     random_state=42,
+        #     n_jobs=-1,
+        #     eval_metric='mlogloss'
+        # )
+
+        # best_model = xgb.XGBClassifier(
+        #     n_estimators=200,
+        #     max_depth=5,
+        #     learning_rate=0.1,
+        #     subsample=0.8,
+        #     colsample_bytree=0.8,
+        #     # objective='multi:softmax',
+        #     num_class=len(classes),
+        #     random_state=42,
+        #     n_jobs=-1,
+        #     eval_metric='aucpr'
+        # )
+        # best_model.fit(X, y, sample_weight=sample_weights)
+
+        pipeline = Pipeline([
+            ('scaler', StandardScaler()),
+            ('classifier', xgb.XGBClassifier(
+                n_estimators=200,
+                max_depth=5,
+                learning_rate=0.1,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                # objective='multi:softmax',
+                num_class=len(classes),
+                random_state=42,
+                n_jobs=-1,
+                eval_metric='aucpr'
+            ))
+        ])
+
+        pipeline.fit(X, y)
+        best_model = pipeline
         
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)

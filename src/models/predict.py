@@ -139,6 +139,7 @@ def save_predictions_to_csv(predictions: Dict, output_path: str):
 def visualize_predictions(predictions: Dict,
                          train_image_dir: str,
                          test_image_dir: str,
+                         validate_image_dir: str,
                          output_dir: str,
                          verbose: bool = True):
     """
@@ -162,18 +163,20 @@ def visualize_predictions(predictions: Dict,
 
     train_image_dir = Path(train_image_dir)
     test_image_dir = Path(test_image_dir)
+    validate_image_dir = Path(validate_image_dir)
     output_dir = Path(output_dir)
 
     # Create visualizations for both train and test
-    train_count, test_count = visualize_all_predictions(
+    train_count, test_count, validate_count = visualize_all_predictions(
         predictions_dict=predictions,
         train_image_dir=train_image_dir,
         test_image_dir=test_image_dir,
+        validate_image_dir=validate_image_dir,
         output_dir=output_dir,
         verbose=verbose
     )
 
-    return train_count, test_count
+    return train_count, test_count, validate_count
 
 
 def load_model(model_path: str):

@@ -24,10 +24,10 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
         Array of 576 features
     """
     # HOG parameters
-    orientations = 9          # Number of orientation bins (0-180° in 20° increments)
-    pixels_per_cell = (15, 20)  # Cell size (75/5=15, 100/5=20 for 5x5 grid)
-    cells_per_block = (2, 2)  # Block normalization
-    number_of_features = 576
+    orientations = 6          # Number of orientation bins (0-180° in 20° increments)
+    pixels_per_cell = (24, 24)  # Cell size (75/5=15, 100/5=20 for 5x5 grid)
+    cells_per_block = (1, 1)  # Block normalization
+    number_of_features = 70
 
 
     # Compute HOG descriptor
@@ -108,4 +108,4 @@ def get_hog_feature_names() -> List[str]:
     Returns:
         List of 576 feature names
     """
-    return [f'hog_{i}' for i in range(576)]
+    return [f'hog_{i}' for i in range(70)]

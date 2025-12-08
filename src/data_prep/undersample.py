@@ -11,10 +11,7 @@ import pandas as pd
 from typing import Tuple, Optional
 from collections import Counter
 
-
-import numpy as np
-import pandas as pd
-from collections import Counter
+from imblearn.over_sampling import SMOTE
 
 def print_class_distribution(y):
     class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
@@ -97,6 +94,72 @@ def oversample_class_1(
 
     return X_over, y_over, df_over
 
+def apply_oversampling (X: np.ndarray,
+    y: np.ndarray,
+    df: pd.DataFrame,
+    target_count_ratio: float = .85,
+    random_seed: int = 42,
+    verbose: bool = True
+) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+    """
+    Apply oversampling to balance class distribution by oversampling Class 1 (Ball).
+
+    Args:
+        X: Feature matrix (n_samples, n_features)
+        y: Label array (n_samples,)
+        df: DataFrame with columns [image_name, cell_index, label, features...]
+        target_count_ratio: Ratio to determine target count for Class 1
+        random_seed: Random seed for reproducibility
+        verbose: Print statistics
+    Returns:
+        Tuple of (X_oversampled, y_oversampled, df_oversampled)
+    """
+
+    np.random.seed(random_seed)
+
+    if verbose:
+        print("="*70)
+        print("APPLYING OVERSAMPLING TO CLASS 1")
+        print("="*70)
+        print(f"Target count ratio: {target_count_ratio}")
+        print(f"Random seed: {random_seed}")
+        print(f"\nOriginal class distribution:")
+        print_class_distribution(y)
+
+    # Apply oversampling to Class 1
+    # X_over, y_over, df_over = oversample_class_1(
+    #     X, y, df,
+    #     target_count_ratio=target_count_ratio,
+    #     random_seed=random_seed,
+    #     verbose=verbose
+    # )
+
+    class1_idx = np.where(y == 1)[0]
+    current_count = len(class1_idx)
+
+    # Calculate target count
+    class_counts = Counter(y)
+    minority_classes = [0, 2, 3]  # no objects, bat, stump
+    # target_count = 3*max(class_counts[cls] for cls in minority_classes)
+    target_count = int(target_count_ratio*max(class_counts[cls] for cls in minority_classes))
+
+
+    if current_count >= target_count:
+        if verbose:
+            print(f"\nClass 1 already has {current_count} samples ≥ target {target_count}. No oversampling done.")
+        return X, y, df
+
+    sm = SMOTE(k_neighbors=2, sampling_strategy={1:target_count}, random_state=random_seed)
+    X_over, y_over = sm.fit_resample(X, y)
+
+    df_over = df.reset_index(drop=True)
+
+
+    if verbose:
+        print(f"\nFinal dataset size after oversampling: {len(y_over):,} samples")
+        print("="*70)
+
+    return X_over, y_over, df_over
 
 def apply_undersampling(
     X: np.ndarray,

@@ -20,12 +20,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
 from grid_utils import divide_into_grid, validate_image_size, resize_image
-from feature_extractor import extract_features_from_cell, get_all_feature_names, extract_hog_per_cell
+from feature_extractor import extract_features_from_cell, get_all_feature_names, compute_hog_per_cell, extract_na_aware_hog_for_grid_features
+# from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features
 from train import train_random_forest, save_model
 from train_compare_models import compare_models, select_best_model, save_comparison_results
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
-from undersample import apply_undersampling, get_undersampling_report, oversample_class_1
+from undersample import apply_undersampling, get_undersampling_report, oversample_class_1, apply_oversampling
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="PIL")
@@ -94,9 +95,18 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             continue
 
         # Divide into grid
+        # cell_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # gray_cells = divide_into_grid(cell_gray, grid_size=(8, 8))
         cells = divide_into_grid(img, grid_size=(8, 8))
 
-        # hog_na_list = extract_hog_per_cell(cells)
+        # gray_cells = [cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY) for cell in cells]
+
+        # hog_list = compute_hog_per_cell(gray_cells, orientations=6,
+        #                                         pixels_per_cell=(16, 16),
+        #                                         cells_per_block=(1, 1))
+        # hog_na_list = extract_na_aware_hog_for_grid_features(hog_list)
+
 
         # Extract features from each cell
         for cell_idx, cell in enumerate(cells):
@@ -251,7 +261,14 @@ def main():
             print(f"\nUndersampling report saved to {output_dir / 'undersampling_report.csv'}")
             print("-"*70)
 
-            X_train, y_train, train_df = oversample_class_1(
+            # X_train, y_train, train_df = oversample_class_1(
+            #     X_train, y_train, train_df,
+            #     target_count_ratio=0.95,
+            #     random_seed=42,
+            #     verbose=True
+            # )
+
+            X_train, y_train, train_df = apply_oversampling(
                 X_train, y_train, train_df,
                 target_count_ratio=0.95,
                 random_seed=42,
@@ -421,10 +438,11 @@ def main():
             print("\n[VISUALIZATION] GENERATING COLOR-CODED GRIDS")
             print("-"*70)
 
-            train_count, test_count = visualize_predictions(
+            train_count, test_count, validate_count = visualize_predictions(
                 predictions=predictions,
                 train_image_dir=args.train_images,
                 test_image_dir=args.test_images,
+                validate_image_dir=args.validate_images,
                 output_dir=args.output_dir,
                 verbose=True
             )
@@ -435,7 +453,8 @@ def main():
                     print(f"  Train: {train_count} images -> {output_dir}/train/visualizations/")
                 if test_count > 0:
                     print(f"  Test: {test_count} images -> {output_dir}/test/visualizations/")
-
+                if validate_count > 0:
+                    print(f"  Validate: {validate_count} images -> {output_dir}/validate/visualizations/")
     print("\n" + "="*70)
     print("PIPELINE COMPLETE!")
     print("="*70)
