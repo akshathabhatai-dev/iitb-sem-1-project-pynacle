@@ -35,6 +35,7 @@ from sklearn.metrics import (
     accuracy_score, f1_score, precision_score, recall_score,
     classification_report, confusion_matrix
 )
+from sklearn.decomposition import PCA
 from sklearn.utils.class_weight import compute_class_weight
 import xgboost as xgb
 
@@ -344,7 +345,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        pipeline = Pipeline([
+        best_pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', SVC(
@@ -354,11 +355,8 @@ def train_svm(X: np.ndarray, y: np.ndarray,
                 class_weight='balanced',
                 random_state=RANDOM_STATE,
                 max_iter=5000
-            ))
-        ])
-
-        pipeline.fit(X, y)
-        best_pipeline = pipeline
+            ))])
+        best_pipeline.fit(X, y)
 
     # Cross-validation evaluation
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
@@ -450,7 +448,7 @@ def train_knn(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        pipeline = Pipeline([
+        best_pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', KNeighborsClassifier(
@@ -458,11 +456,8 @@ def train_knn(X: np.ndarray, y: np.ndarray,
                 weights='distance',
                 metric='euclidean',
                 n_jobs=-1
-            ))
-        ])
-
-        pipeline.fit(X, y)
-        best_pipeline = pipeline
+            ))])
+        best_pipeline.fit(X, y)
 
     # Cross-validation evaluation
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)

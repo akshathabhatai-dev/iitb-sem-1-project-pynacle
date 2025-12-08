@@ -25,12 +25,14 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
                   Expected size: 75x100 pixels
 
     Returns:
-        Array of 144 features (REDUCED from 576)
+        Array of 576 features
     """
     # HOG parameters - MODIFIED to reduce feature count
     orientations = 9          # Number of orientation bins (0-180° in 20° increments)
     pixels_per_cell = (25, 33)  # LARGER cells: 75/3=25, 100/3=33 for 3x3 grid (was 15,20)
     cells_per_block = (2, 2)  # Block normalization
+    number_of_features = 576
+
 
     # Compute HOG descriptor
     try:
@@ -44,13 +46,20 @@ def extract_hog_features(cell_gray: np.ndarray) -> np.ndarray:
             feature_vector=True
         )
 
-        # For 75x100 cells with new parameters, this will be 144 features
-        features = hog_descriptor
+        # The HOG descriptor may have variable length
+        # We need exactly number_of_features features
+        if len(hog_descriptor) >= number_of_features:
+            # Take first number_of_features components
+            features = hog_descriptor[:number_of_features]
+        else:
+            # Pad with zeros if less than number_of_features
+            features = np.zeros(number_of_features, dtype=np.float32)
+            features[:len(hog_descriptor)] = hog_descriptor
 
     except Exception as e:
         # If HOG fails (e.g., image too small), return zeros
         print(f"HOG extraction failed: {e}")
-        features = np.zeros(144, dtype=np.float32)
+        features = np.zeros(number_of_features, dtype=np.float32)
 
     return features.astype(np.float32)
 
@@ -101,6 +110,6 @@ def get_hog_feature_names() -> List[str]:
     Get the names of HOG features.
 
     Returns:
-        List of 144 feature names (REDUCED from 576)
+        List of 576 feature names
     """
-    return [f'hog_{i}' for i in range(144)]
+    return [f'hog_{i}' for i in range(576)]

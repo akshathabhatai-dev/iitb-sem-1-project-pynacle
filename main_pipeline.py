@@ -12,18 +12,20 @@ from tqdm import tqdm
 import sys
 import os
 
+from src.models.train import train_xgboost
+
 # Add src directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'features'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
 from grid_utils import divide_into_grid, validate_image_size, resize_image
-from feature_extractor import extract_features_from_cell
+from feature_extractor import extract_features_from_cell, get_all_feature_names, extract_hog_per_cell
 from train import train_random_forest, save_model
 from train_compare_models import compare_models, select_best_model, save_comparison_results
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
-from undersample import apply_undersampling, get_undersampling_report
+from undersample import apply_undersampling, get_undersampling_report, oversample_class_1
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="PIL")
@@ -52,7 +54,7 @@ def load_labels_from_csv(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True):
+def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True, test_data: bool = False):
     """
     Extract features and labels from images.
 
@@ -87,16 +89,19 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
     for img_name, img in iterator:
         # Check if labels exist for this image
         if img_name not in labels_dict:
-            if verbose:
+            if verbose and not test_data:
                 print(f"Warning: No labels found for {img_name}, skipping...")
             continue
 
         # Divide into grid
         cells = divide_into_grid(img, grid_size=(8, 8))
 
+        # hog_na_list = extract_hog_per_cell(cells)
+
         # Extract features from each cell
         for cell_idx, cell in enumerate(cells):
-            features = extract_features_from_cell(cell)
+            # features = extract_features_from_cell(cell, na_hog_vector=hog_na_list[cell_idx]) # to enable NA-HOG
+            features = extract_features_from_cell(cell)  # without NA-HOG
             label = labels_dict[img_name][cell_idx]
 
             X_list.append(features)
@@ -113,10 +118,12 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
     #     [f"gabor_{i}" for i in range(20)] +
     #     [f"glcm_{i}" for i in range(10)]
     # )
-    num_features = len(X_list[0])   # auto-detect feature count
+    
+    # num_features = len(X_list[0])   # auto-detect feature count
 
-    feature_columns = [f"f_{i}" for i in range(num_features)]   # auto column names
+    # feature_columns = [f"f_{i}" for i in range(num_features)]   # auto column names
 
+    feature_columns = get_all_feature_names()
 
     columns = ["image_name", "cell_index", 'label'] + feature_columns
     df = pd.DataFrame(X_list, columns=feature_columns)
@@ -129,6 +136,37 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
 
     return X, y, image_names_list, df
 
+def select_balanced_data(X_train, y_train, under_sample_size=1500, over_sample_size=1500, seed=42):
+    """
+    Returns:
+        X_final: X with all class 1,2,3 + sample_size random class 0
+        y_final: corresponding y values
+    """
+
+    # Set the seed for reproducibility
+    rng = np.random.default_rng(seed)
+
+    # Get indices for classes
+    idx_0 = np.where(y_train == 0)[0]
+    idx_1 = np.where(y_train == 1)[0]
+    idx_23 = np.where(np.isin(y_train, [2, 3]))[0]
+
+    # Randomly sample class-0 indices
+    idx_0_sample = rng.choice(idx_0, size=under_sample_size, replace=False)
+    idx_1_sample = rng.choice(idx_1, size=over_sample_size, replace=True)
+
+    # Combine indices
+    final_idx = np.concatenate([idx_0_sample, idx_1_sample, idx_23])
+
+    # Shuffle final indices with the same seed
+    rng.shuffle(final_idx)
+
+    # Select final data
+    X_final = X_train[final_idx]
+    y_final = y_train[final_idx]
+
+    return X_final, y_final
+
 
 def main():
     """Main pipeline execution."""
@@ -137,6 +175,8 @@ def main():
     parser = argparse.ArgumentParser(description='Cricket Object Detection Pipeline')
     parser.add_argument('--mode', type=str, choices=['extract', 'train', 'evaluate', 'predict', 'full'],
                        required=True, help='Pipeline mode')
+    parser.add_argument('--model', type=str, choices=['xgboost', 'random_forest'], 
+                       help='Model type to use')
     parser.add_argument('--train_images', type=str, default='dataset/train/images',
                        help='Directory with training images')
     parser.add_argument('--test_images', type=str, default='dataset/test/images',
@@ -225,6 +265,22 @@ def main():
             print(f"\nUndersampling report saved to {output_dir / 'undersampling_report.csv'}")
             print("-"*70)
 
+            X_train, y_train, train_df = oversample_class_1(
+                X_train, y_train, train_df,
+                target_count_ratio=0.95,
+                random_seed=42,
+                verbose=True
+            )
+
+            print(f"\nAfter oversampling: X_train shape = {X_train.shape}")
+            print(f"After oversampling: y_train shape = {y_train.shape}")
+
+            # Generate and save oversampling report
+            report = get_undersampling_report(y_train_original, y_train)
+            report.to_csv(output_dir / 'oversampling_report.csv', index=False)
+            print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
+            print("-"*70)
+
         # Save features
         train_df.to_csv(output_dir / 'train_features.csv', index=False)
         np.save(output_dir / 'X_train.npy', X_train)
@@ -239,7 +295,7 @@ def main():
 
             print(f"Found {len(test_images)} test images")
 
-            X_test, y_test, _, test_df = extract_features_and_labels(test_images, test_labels_df)
+            X_test, y_test, _, test_df = extract_features_and_labels(test_images, test_labels_df, test_data=True)
 
             print(f"Extracted features: X_test shape = {X_test.shape}")
 
@@ -342,11 +398,7 @@ def main():
         print("\n[3/4] MODEL EVALUATION")
         print("-"*70)
 
-        # Load test data
-        # if args.mode == 'predict':
-        #     X_test = np.load(output_dir / 'X_test.npy')
-        #     # y_test = np.load(output_dir / 'y_test.npy')
-        # elif args.mode != 'full':
+        # Load validation data
         if args.mode != 'full':
             X_validate = np.load(output_dir / 'X_validate.npy')
             y_validate = np.load(output_dir / 'y_validate.npy')

@@ -12,6 +12,92 @@ from typing import Tuple, Optional
 from collections import Counter
 
 
+import numpy as np
+import pandas as pd
+from collections import Counter
+
+def print_class_distribution(y):
+    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
+    unique, counts = np.unique(y, return_counts=True)
+    total = len(y)
+    for cls, count in zip(unique, counts):
+        pct = (count / total) * 100
+        print(f"  Class {cls} ({class_names.get(cls,'Unknown')}): {count} samples ({pct:.2f}%)")
+
+
+def oversample_class_1(
+    X: np.ndarray,
+    y: np.ndarray,
+    df: pd.DataFrame,
+    target_count_ratio: float = .85,
+    random_seed: int = 42,
+    verbose: bool = True
+):
+    """
+    Oversample ONLY Class 1 (Ball) to reach target_count.
+
+    Args:
+        X: Feature matrix
+        y: Label vector
+        df: DataFrame aligned with X,y
+        target_count: Final desired number of samples for class 1
+        random_seed: Reproducibility
+        verbose: Print distribution before/after
+
+    Returns:
+        X_over, y_over, df_over
+    """
+
+    np.random.seed(random_seed)
+
+    if verbose:
+        print("="*70)
+        print("OVERSAMPLING ONLY CLASS 1")
+        print("="*70)
+        print("Original class distribution:")
+        print_class_distribution(y)
+
+    # --------------------------
+    # Class 1 indices
+    # --------------------------
+    class1_idx = np.where(y == 1)[0]
+    current_count = len(class1_idx)
+
+    # Calculate target count
+    class_counts = Counter(y)
+    minority_classes = [0, 2, 3]  # no objects, bat, stump
+    # target_count = 3*max(class_counts[cls] for cls in minority_classes)
+    target_count = int(target_count_ratio*max(class_counts[cls] for cls in minority_classes))
+
+
+    if current_count >= target_count:
+        if verbose:
+            print(f"\nClass 1 already has {current_count} samples ≥ target {target_count}. No oversampling done.")
+        return X, y, df
+
+    # --------------------------
+    # Oversampling
+    # --------------------------
+    extra_needed = target_count - current_count
+    extra_samples = np.random.choice(class1_idx, size=extra_needed, replace=True)
+
+    # Combine indices
+    final_indices = np.concatenate([np.arange(len(y)), extra_samples])
+    np.random.shuffle(final_indices)
+
+    X_over = X[final_indices]
+    y_over = y[final_indices]
+    df_over = df.iloc[final_indices].reset_index(drop=True)
+
+    if verbose:
+        print(f"\nTarget Class 1 size: {target_count}")
+        print("\nNew class distribution:")
+        print_class_distribution(y_over)
+        print("="*70)
+
+    return X_over, y_over, df_over
+
+
 def apply_undersampling(
     X: np.ndarray,
     y: np.ndarray,
@@ -19,7 +105,8 @@ def apply_undersampling(
     strategy: str = 'image_stratified',
     target_ratio: str = 'max_minority',
     random_seed: int = 42,
-    verbose: bool = True
+    verbose: bool = True,
+    target_count_ratio: Optional[float] = 1.25
 ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
     """
     Apply undersampling to balance class distribution.
@@ -52,7 +139,8 @@ def apply_undersampling(
     # Calculate target count
     class_counts = Counter(y)
     minority_classes = [1, 2, 3]  # ball, bat, stump
-    target_count = 3*max(class_counts[cls] for cls in minority_classes)
+    # target_count = 3*max(class_counts[cls] for cls in minority_classes)
+    target_count = int(target_count_ratio*max(class_counts[cls] for cls in minority_classes))
 
     if verbose:
         print(f"\nTarget sample count: {target_count} (from largest minority class)")

@@ -8,11 +8,17 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from rgb_features import extract_rgb_histogram_features, get_rgb_feature_names
+from rgb_hist_features import extract_rgb_hist_features, get_rgb_hist_feature_names
 from hsv_features import extract_hsv_color_features, rgb_to_hsv, get_hsv_feature_names
+from hsv_hist_features import extract_hsv_hist_color_features, get_hsv_hist_feature_names
 from lbp_features import extract_lbp_features, get_lbp_feature_names
 from hog_features import extract_hog_features, get_hog_feature_names
 from gabor_features import extract_gabor_features, get_gabor_feature_names
 from glcm_features import extract_glcm_features, get_glcm_feature_names
+from hu_moment_features import extract_hu_moment_features, get_hu_moment_feature_names
+from sift_features import extract_sift_features, get_sift_feature_names
+from orb_features import extract_orb_features, get_orb_feature_names
+from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features, get_na_aware_hog_feature_names
 
 # PHASE 1 FEATURES - Enhanced detection for ball/bat/stump
 from enhanced_color_features import extract_enhanced_color_features, get_enhanced_color_feature_names
@@ -44,7 +50,7 @@ from laws_texture_features import extract_laws_texture_features, get_laws_textur
 from fourier_texture_features import extract_fourier_texture_features, get_fourier_texture_feature_names
 
 
-def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
+def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.ndarray:
     """
     Extract all 406 features from a single RGB cell (PHASE 4C - Advanced Texture).
 
@@ -96,12 +102,14 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
     # ========== COLOR FEATURES (40 total - original 28 + 12 HSV bins) ==========
 
     # 1. RGB Histogram Features (14 features)
-    rgb_features = extract_rgb_histogram_features(cell_rgb)
+    # rgb_features = extract_rgb_histogram_features(cell_rgb)
+    rgb_hist_features = extract_rgb_hist_features(cell_rgb)
 
     # 2. HSV Color Features (26 features - PHASE 4A ENHANCED from 14)
     # Now includes 12 fine hue bins for improved red ball detection
     cell_hsv = rgb_to_hsv(cell_rgb)
-    hsv_features = extract_hsv_color_features(cell_hsv)
+    # hsv_features = extract_hsv_color_features(cell_hsv)
+    hsv_hist_features = extract_hsv_hist_color_features(cell_hsv)
 
     # ========== TEXTURE FEATURES (60 total) ==========
 
@@ -113,6 +121,12 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
 
     # 4. Histogram of Oriented Gradients (144 features)
     hog_features = extract_hog_features(cell_gray)
+    # hog_features = na_hog_vector
+    # print(hog_features.shape)
+
+    # if na_hog_vector is None or len(na_hog_vector) == 0:
+    #     raise ValueError("Neighborhood HOG failed: na_hog_vector is empty!")
+    # hog_features = na_hog_vector.astype(np.float32)
 
     # 5. Gabor Filters (20 features)
     gabor_features = extract_gabor_features(cell_gray)
@@ -142,7 +156,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
 
     # 11. SIFT Features (14 features)
     # Critical for object keypoint detection and scale-invariant features
-    sift_features = extract_sift_features(cell_rgb)
+    # sift_features = extract_sift_features(cell_rgb) abhi
 
     # 12. Enhanced Texture Features (14 features)
     # Critical for bat (wood texture) via Haralick descriptors
@@ -198,14 +212,40 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
     # Note: LBP enhanced (+6 features) and GLCM enhanced (+3 features) already integrated above
 
     # ========== COMBINE ALL FEATURES ==========
+    # all_features = np.concatenate([
+    #     # Original features (236 - includes +12 HSV, +6 LBP, +3 GLCM from Phase 4C)
+    #     rgb_features,      # 14
+    #     hsv_features,      # 26 (PHASE 4A: 14 original + 12 fine hue bins)
+    #     lbp_features,      # 16 (PHASE 4C: 10 original + 6 multi-scale)
+    #     hog_features,      # 144 (REDUCED from 576)
+    #     gabor_features,    # 20
+    #     glcm_features,     # 13 (PHASE 4C: 10 original + 3 multi-distance)
+
+        
+    # ])
+
+    # Verify we have exactly 406 per-cell features (236 + 65 + 36 + 30 + 20 + 7 + 15)
+    assert len(all_features) == 406, f"Expected 406 features, got {len(all_features)}"
+    hu_moment_features = extract_hu_moment_features(cell_gray)
+    # sift_features = extract_sift_features(cell_gray)
+    sift_features = extract_sift_features(cell_gray, max_features=5)  # limit to first 5 keypoints
+    orb_features = extract_orb_features(cell_gray, max_features=10)  # limit to first 10 keypoints
+
+    
+
+    # ========== COMBINE ALL FEATURES ==========
     all_features = np.concatenate([
-        # Original features (236 - includes +12 HSV, +6 LBP, +3 GLCM from Phase 4C)
-        rgb_features,      # 14
-        hsv_features,      # 26 (PHASE 4A: 14 original + 12 fine hue bins)
-        lbp_features,      # 16 (PHASE 4C: 10 original + 6 multi-scale)
-        hog_features,      # 144 (REDUCED from 576)
+        # rgb_features,      # 14
+        rgb_hist_features, # 768
+        # hsv_features,      # 14
+        hsv_hist_features, # 768
+        lbp_features,      # 10
+        hog_features,      # 576
         gabor_features,    # 20
-        glcm_features,     # 13 (PHASE 4C: 10 original + 3 multi-distance)
+        glcm_features,     # 12
+        hu_moment_features, # 7
+        sift_features,      # 640
+        orb_features,      # 320
 
         # Phase 1 features (65 - includes +11 Shape from Phase 4B)
         enhanced_color_features,  # 18
@@ -214,7 +254,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
 
         # Phase 2 features (36)
         morphological_features,   # 8
-        sift_features,            # 14
+        # sift_features,            # 14
         enhanced_texture_features,# 14
 
         # Phase 3 features (30)
@@ -233,9 +273,19 @@ def extract_features_from_cell(cell_rgb: np.ndarray) -> np.ndarray:
         laws_features,            # 9
         fourier_features          # 6
     ])
-
-    # Verify we have exactly 406 per-cell features (236 + 65 + 36 + 30 + 20 + 7 + 15)
-    assert len(all_features) == 406, f"Expected 406 features, got {len(all_features)}"
+    # print("SIFT Size:", len(sift_features))
+    # print("ORB Size:", len(orb_features))
+    # print("NA-HOG Size:", len(hog_features))
+    # print(f"Extracted {len(all_features)} features from cell.")
+    # Verify we have exactly 88 features
+    # assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
+    # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
+    # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
+    assert len(all_features) == 3280, f"Expected 3121 features, got {len(all_features)}" # with normal hog all features
+    # assert len(all_features) == 2565, f"Expected 2565 features, got {len(all_features)}" # with normal hog
+    # assert len(all_features) == 31057, f"Expected 31057 features, got {len(all_features)}" # with na normal hog
+    # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
+    # assert len(all_features) == 856, f"Expected 856 features, got {len(all_features)}"
 
     return all_features.astype(np.float32)
 
@@ -252,13 +302,20 @@ def get_all_feature_names() -> List[str]:
     """
     all_names = []
 
-    # Original features (236 - includes +12 HSV, +6 LBP, +3 GLCM from Phase 4C)
-    all_names.extend(get_rgb_feature_names())    # 14
-    all_names.extend(get_hsv_feature_names())    # 26 (PHASE 4A: 14 original + 12 fine hue bins)
-    all_names.extend(get_lbp_feature_names())    # 16 (PHASE 4C: 10 original + 6 multi-scale)
-    all_names.extend(get_hog_feature_names())    # 144
+
+    # all_names.extend(get_rgb_feature_names())    # 14
+    all_names.extend(get_rgb_hist_feature_names())    # 768
+    # all_names.extend(get_hsv_feature_names())    # 14
+    all_names.extend(get_hsv_hist_feature_names())  # 768
+    all_names.extend(get_lbp_feature_names())    # 10
+    all_names.extend(get_hog_feature_names())    # 576
+    # all_names.extend(get_na_aware_hog_feature_names())    # 20
     all_names.extend(get_gabor_feature_names())  # 20
-    all_names.extend(get_glcm_feature_names())   # 13 (PHASE 4C: 10 original + 3 multi-distance)
+    all_names.extend(get_glcm_feature_names())   # 12
+    all_names.extend(get_hu_moment_feature_names())   # 7
+    all_names.extend(get_sift_feature_names(max_features=5))   # 640
+    all_names.extend(get_orb_feature_names(max_features=10))   # 320
+    # all_names.extend(get_sift_feature_names())   # 16384
 
     # Phase 1 features (65 - includes +11 Shape from Phase 4B)
     all_names.extend(get_enhanced_color_feature_names())  # 18
@@ -267,7 +324,7 @@ def get_all_feature_names() -> List[str]:
 
     # Phase 2 features (36)
     all_names.extend(get_morphological_feature_names())   # 8
-    all_names.extend(get_sift_feature_names())            # 14
+    # all_names.extend(get_sift_feature_names())            # 14 abhi
     all_names.extend(get_enhanced_texture_feature_names()) # 14
 
     # Phase 3 features (30)
@@ -286,10 +343,40 @@ def get_all_feature_names() -> List[str]:
     all_names.extend(get_laws_texture_feature_names())    # 9
     all_names.extend(get_fourier_texture_feature_names()) # 6
 
-    assert len(all_names) == 406, f"Expected 406 per-cell feature names, got {len(all_names)}"
+    # print(f"Extracted {len(all_names)} feature names from cell.")
+    # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
+    # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
+    # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
+    assert len(all_names) == 3280, f"Expected 3121 features, got {len(all_names)}" # with normal hog all features
+    # assert len(all_names) == 2565, f"Expected 2565 feature names, got {len(all_names)}" # with normal hog
+    # assert len(all_names) == 31057, f"Expected 31057 feature names, got {len(all_names)}" # with na normal hog
+    # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"
+    # assert len(all_names) == 856, f"Expected 856 feature names, got {len(all_names)}"
 
     return all_names
 
+def extract_hog_per_cell(cells: List[np.ndarray]) -> List[np.ndarray]:
+    """
+    Compute HOG for each cell in the 8x8 grid.
+    Returns list of 64 HOG vectors.
+    """
+    # Convert each of 64 cells to grayscale
+    gray_cells = [cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY) for cell in cells]
+
+    # 1️⃣ Compute normal HOG for each cell
+    hog_list = compute_hog_per_cell(gray_cells)
+
+    # 2️⃣ Compute neighborhood-aware HOG for each of 64 cells
+    hog_na_list = extract_na_aware_hog_for_grid_features(hog_list)
+
+    for idx, v in enumerate(hog_na_list):
+        # print(f"NA-HOG vector length for cell {idx}: {len(v)}")
+        if v is None or len(v) == 0:
+            print(f"[ERROR] NA-HOG failed for cell index {idx}")
+            print(f"Original HOG length: {len(hog_list[idx])}")
+            raise ValueError("Invalid NA-HOG vector")
+        
+    return hog_na_list
 
 def extract_features_from_image(image: np.ndarray, cells: List[np.ndarray] = None) -> np.ndarray:
     """
@@ -313,11 +400,37 @@ def extract_features_from_image(image: np.ndarray, cells: List[np.ndarray] = Non
 
     if cells is None:
         cells = divide_into_grid(image, grid_size=(8, 8))
+    
+    # # Convert each of 64 cells to grayscale
+    # gray_cells = [cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY) for cell in cells]
+
+    # # 1️⃣ Compute normal HOG for each cell
+    # hog_list = compute_hog_per_cell(gray_cells)
+
+    # 2️⃣ Compute neighborhood-aware HOG for each of 64 cells
+    hog_na_list = extract_hog_per_cell(cells)
+
+    # for idx, v in enumerate(hog_na_list):
+    #     print(f"NA-HOG vector length for cell {idx}: {len(v)}")
+    #     if v is None or len(v) == 0:
+    #         print(f"[ERROR] NA-HOG failed for cell index {idx}")
+    #         print(f"Original HOG length: {len(hog_list[idx])}")
+    #         raise ValueError("Invalid NA-HOG vector")
+
+    
 
     # ========== STEP 1: Extract per-cell features (382 features) ==========
     per_cell_features_list = []
-    for cell in cells:
-        features = extract_features_from_cell(cell)
+    # for cell in cells:
+        # features = extract_features_from_cell(cell)
+        # features_list.append(features)
+    for idx, cell in enumerate(cells):
+        print(f"Extracting features from cell {idx+1}/64")
+        print(hog_na_list[idx].shape())
+        features = extract_features_from_cell(
+            cell_rgb=cell,
+            na_hog_vector=hog_na_list[idx]      # inject NA-HOG here
+        )
         per_cell_features_list.append(features)
 
     per_cell_features = np.array(per_cell_features_list, dtype=np.float32)
