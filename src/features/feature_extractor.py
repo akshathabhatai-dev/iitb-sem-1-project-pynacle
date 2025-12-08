@@ -129,7 +129,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # hog_features = na_hog_vector.astype(np.float32)
 
     # 5. Gabor Filters (20 features)
-    gabor_features = extract_gabor_features(cell_gray)
+    # gabor_features = extract_gabor_features(cell_gray)
 
     # 6. GLCM (13 features - PHASE 4C: 10 original + 3 multi-distance)
     glcm_features = extract_glcm_features(cell_gray)
@@ -227,8 +227,9 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # Verify we have exactly 406 per-cell features (236 + 65 + 36 + 30 + 20 + 7 + 15)
     hu_moment_features = extract_hu_moment_features(cell_gray)
     # sift_features = extract_sift_features(cell_gray)
-    sift_features = extract_sift_features(cell_gray, max_features=5)  # limit to first 5 keypoints
-    orb_features = extract_orb_features(cell_gray, max_features=10)  # limit to first 10 keypoints
+
+    # sift_features = extract_sift_features(cell_gray, max_features=5)  # limit to first 5 keypoints
+    # orb_features = extract_orb_features(cell_gray, max_features=10)  # limit to first 10 keypoints
 
     
 
@@ -240,11 +241,11 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
         hsv_hist_features, # 768
         lbp_features,      # 10
         hog_features,      # 576
-        gabor_features,    # 20
+        # gabor_features,    # 20
         glcm_features,     # 12
         hu_moment_features, # 7
-        sift_features,      # 640
-        orb_features,      # 320
+        # sift_features,      # 640
+        #orb_features,      # 320
 
         # Phase 1 features (65 - includes +11 Shape from Phase 4B)
         enhanced_color_features,  # 18
@@ -280,7 +281,8 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
     # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
-    assert len(all_features) == 3289, f"Expected 3289 features, got {len(all_features)}" # with normal hog all features
+    # assert len(all_features) == 3289, f"Expected 3289 features, got {len(all_features)}" # with normal hog all features
+    assert len(all_features) == 2309, f"Expected 2309 features, got {len(all_features)}" # with normal hog all features
     # assert len(all_features) == 2565, f"Expected 2565 features, got {len(all_features)}" # with normal hog
     # assert len(all_features) == 31057, f"Expected 31057 features, got {len(all_features)}" # with na normal hog
     # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
@@ -309,11 +311,11 @@ def get_all_feature_names() -> List[str]:
     all_names.extend(get_lbp_feature_names())    # 10
     all_names.extend(get_hog_feature_names())    # 576
     # all_names.extend(get_na_aware_hog_feature_names())    # 20
-    all_names.extend(get_gabor_feature_names())  # 20
+    # all_names.extend(get_gabor_feature_names())  # 20
     all_names.extend(get_glcm_feature_names())   # 12
     all_names.extend(get_hu_moment_feature_names())   # 7
-    all_names.extend(get_sift_feature_names(max_features=5))   # 640
-    all_names.extend(get_orb_feature_names(max_features=10))   # 320
+    # all_names.extend(get_sift_feature_names(max_features=5))   # 640
+    # all_names.extend(get_orb_feature_names(max_features=10))   # 320
     # all_names.extend(get_sift_feature_names())   # 16384
 
     # Phase 1 features (65 - includes +11 Shape from Phase 4B)
@@ -348,7 +350,8 @@ def get_all_feature_names() -> List[str]:
     # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
     # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
     # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
-    assert len(all_names) == 3289, f"Expected 3289 features, got {len(all_names)}" # with normal hog all features
+    # assert len(all_names) == 3289, f"Expected 3289 features, got {len(all_names)}" # with normal hog all features
+    assert len(all_names) == 2309, f"Expected 2309 features, got {len(all_names)}" # with normal hog all features
     # assert len(all_names) == 2565, f"Expected 2565 feature names, got {len(all_names)}" # with normal hog
     # assert len(all_names) == 31057, f"Expected 31057 feature names, got {len(all_names)}" # with na normal hog
     # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"
