@@ -28,6 +28,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV, cross_validate, StratifiedKFold
 from sklearn.metrics import (
@@ -44,6 +45,10 @@ import os
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'features'))
+
+# Import configuration constants
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from config import PCA_VARIANCE_THRESHOLD, RANDOM_STATE, CV_FOLDS, CV_SCORING_METRIC
 
 
 def train_logistic_regression(X: np.ndarray, y: np.ndarray,
@@ -79,13 +84,14 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
             'classifier__max_iter': [1000]
         }
 
-        # Create pipeline with scaling
+        # Create pipeline with scaling and PCA (scale before PCA!)
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 multi_class='multinomial',
                 class_weight='balanced',
-                random_state=42,
+                random_state=RANDOM_STATE,
                 n_jobs=-1
             ))
         ])
@@ -94,7 +100,7 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
         grid_search = GridSearchCV(
             pipeline, param_grid,
             cv=cv_folds,
-            scoring='f1_macro',
+            scoring=CV_SCORING_METRIC,
             n_jobs=-1,
             verbose=0
         )
@@ -109,7 +115,8 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 C=1.0,
                 penalty='l2',
@@ -117,7 +124,7 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
                 multi_class='multinomial',
                 class_weight='balanced',
                 max_iter=1000,
-                random_state=42,
+                random_state=RANDOM_STATE,
                 n_jobs=-1
             ))
         ])
@@ -126,7 +133,7 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
         best_pipeline = pipeline
 
     # Cross-validation evaluation
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
@@ -163,9 +170,15 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
 def train_random_forest(X: np.ndarray, y: np.ndarray,
                        tune_hyperparameters: bool = True,
                        cv_folds: int = 5,
-                       verbose: bool = True) -> Tuple[RandomForestClassifier, Dict]:
+                       verbose: bool = True) -> Tuple[Pipeline, Dict]:
     """
-    Train Random Forest classifier.
+    Train Random Forest classifier with PCA preprocessing.
+
+    Note: With 431 features, PCA is essential for Random Forest to:
+    - Reduce dimensionality and prevent overfitting
+    - Speed up training time
+    - Improve generalization performance
+    - StandardScaler is required before PCA for proper variance scaling
 
     Args:
         X: Training features (n_samples, n_features)
@@ -175,7 +188,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
         verbose: Print training progress
 
     Returns:
-        Tuple of (trained_model, metrics_dict)
+        Tuple of (trained_pipeline, metrics_dict)
     """
     if verbose:
         print("\n" + "="*70)
@@ -187,28 +200,33 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
     if tune_hyperparameters:
         # Hyperparameter grid (from existing train.py)
         param_grid = {
-            'n_estimators': [100, 200, 300],
-            'max_depth': [15, 20, 25],
-            'min_samples_split': [5, 10, 15],
-            'min_samples_leaf': [2, 5, 10]
+            'classifier__n_estimators': [100, 200, 300],
+            'classifier__max_depth': [15, 20, 25],
+            'classifier__min_samples_split': [5, 10, 15],
+            'classifier__min_samples_leaf': [2, 5, 10]
         }
 
-        base_model = RandomForestClassifier(
-            class_weight='balanced',
-            random_state=42,
-            n_jobs=-1
-        )
+        # Create pipeline with scaling and PCA
+        pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', RandomForestClassifier(
+                class_weight='balanced',
+                random_state=RANDOM_STATE,
+                n_jobs=-1
+            ))
+        ])
 
         grid_search = GridSearchCV(
-            base_model, param_grid,
+            pipeline, param_grid,
             cv=cv_folds,
-            scoring='f1_macro',
+            scoring=CV_SCORING_METRIC,
             n_jobs=-1,
             verbose=0
         )
 
         grid_search.fit(X, y)
-        best_model = grid_search.best_estimator_
+        best_pipeline = grid_search.best_estimator_
 
         if verbose:
             print(f"Best parameters: {grid_search.best_params_}")
@@ -216,22 +234,27 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        best_model = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=20,
-            min_samples_split=10,
-            min_samples_leaf=5,
-            class_weight='balanced',
-            random_state=42,
-            n_jobs=-1
-        )
+        pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', RandomForestClassifier(
+                n_estimators=200,
+                max_depth=20,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                class_weight='balanced',
+                random_state=RANDOM_STATE,
+                n_jobs=-1
+            ))
+        ])
 
-        best_model.fit(X, y)
+        pipeline.fit(X, y)
+        best_pipeline = pipeline
 
     # Cross-validation evaluation
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
-        best_model, X, y,
+        best_pipeline, X, y,
         cv=cv,
         scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
@@ -260,7 +283,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
         print(f"  Recall:    {metrics['recall_macro_mean']:.4f} (+/- {metrics['recall_macro_std']:.4f})")
         print(f"  Train Time: {train_time:.2f}s")
 
-    return best_model, metrics
+    return best_pipeline, metrics
 
 
 def train_svm(X: np.ndarray, y: np.ndarray,
@@ -296,10 +319,11 @@ def train_svm(X: np.ndarray, y: np.ndarray,
         }
 
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', SVC(
                 class_weight='balanced',
-                random_state=42,
+                random_state=RANDOM_STATE,
                 max_iter=5000
             ))
         ])
@@ -307,7 +331,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
         grid_search = GridSearchCV(
             pipeline, param_grid,
             cv=cv_folds,
-            scoring='f1_macro',
+            scoring=CV_SCORING_METRIC,
             n_jobs=-1,
             verbose=0
         )
@@ -321,18 +345,21 @@ def train_svm(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        best_pipeline = SVC(
+        best_pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', SVC(
                 C=1.0,
                 kernel='rbf',
                 gamma='scale',
                 class_weight='balanced',
-                random_state=42,
+                random_state=RANDOM_STATE,
                 max_iter=5000
-            )
+            ))])
         best_pipeline.fit(X, y)
 
     # Cross-validation evaluation
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
@@ -399,14 +426,15 @@ def train_knn(X: np.ndarray, y: np.ndarray,
         }
 
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', KNeighborsClassifier(n_jobs=-1))
         ])
 
         grid_search = GridSearchCV(
             pipeline, param_grid,
             cv=cv_folds,
-            scoring='f1_macro',
+            scoring=CV_SCORING_METRIC,
             n_jobs=-1,
             verbose=0
         )
@@ -420,16 +448,19 @@ def train_knn(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        best_pipeline = KNeighborsClassifier(
+        best_pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', KNeighborsClassifier(
                 n_neighbors=5,
                 weights='distance',
                 metric='euclidean',
                 n_jobs=-1
-            )
+            ))])
         best_pipeline.fit(X, y)
 
     # Cross-validation evaluation
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
@@ -466,7 +497,7 @@ def train_knn(X: np.ndarray, y: np.ndarray,
 def train_xgboost(X: np.ndarray, y: np.ndarray,
                  tune_hyperparameters: bool = True,
                  cv_folds: int = 5,
-                 verbose: bool = True) -> Tuple[xgb.XGBClassifier, Dict]:
+                 verbose: bool = True) -> Tuple[Pipeline, Dict]:
     """
     Train XGBoost classifier.
 
@@ -495,31 +526,35 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
     if tune_hyperparameters:
         # Hyperparameter grid (coarser for speed)
         param_grid = {
-            'n_estimators': [100, 200, 300],
-            'max_depth': [3, 5, 7],
-            'learning_rate': [0.01, 0.1],
-            'subsample': [0.8, 1.0],
-            'colsample_bytree': [0.8, 1.0]
+            'classifier__n_estimators': [100, 200, 300],
+            'classifier__max_depth': [3, 5, 7],
+            'classifier__learning_rate': [0.01, 0.1],
+            'classifier__subsample': [0.8, 1.0],
+            'classifier__colsample_bytree': [0.8, 1.0]
         }
 
-        base_model = xgb.XGBClassifier(
-            objective='multi:softmax',
-            num_class=len(classes),
-            random_state=42,
-            n_jobs=-1,
-            eval_metric='mlogloss'
-        )
+        pipeline = Pipeline([
+            # ('scaler', StandardScaler()),
+            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+            ('classifier', xgb.XGBClassifier(
+                objective='multi:softmax',
+                num_class=len(classes),
+                random_state=RANDOM_STATE,
+                n_jobs=-1,
+                eval_metric='mlogloss'
+            ))
+        ])
 
         grid_search = GridSearchCV(
-            base_model, param_grid,
+            pipeline, param_grid,
             cv=cv_folds,
-            scoring='f1_macro',
+            scoring=CV_SCORING_METRIC,
             n_jobs=-1,
             verbose=0
         )
 
-        grid_search.fit(X, y, sample_weight=sample_weights)
-        best_model = grid_search.best_estimator_
+        grid_search.fit(X, y, classifier__sample_weight=sample_weights)
+        best_pipeline = grid_search.best_estimator_
 
         if verbose:
             print(f"Best parameters: {grid_search.best_params_}")
@@ -564,7 +599,7 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
                 colsample_bytree=0.8,
                 # objective='multi:softmax',
                 num_class=len(classes),
-                random_state=42,
+                random_state=RANDOM_STATE,
                 n_jobs=-1,
                 eval_metric='aucpr'
             ))
@@ -574,9 +609,9 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         best_model = pipeline
         
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
-        best_model, X, y,
+        best_pipeline, X, y,
         cv=cv,
         scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
@@ -605,7 +640,7 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         print(f"  Recall:    {metrics['recall_macro_mean']:.4f} (+/- {metrics['recall_macro_std']:.4f})")
         print(f"  Train Time: {train_time:.2f}s")
 
-    return best_model, metrics
+    return best_pipeline, metrics
 
 
 def compare_models(X_train: np.ndarray, y_train: np.ndarray,
