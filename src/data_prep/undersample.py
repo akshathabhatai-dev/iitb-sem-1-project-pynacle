@@ -149,17 +149,17 @@ def apply_oversampling (X: np.ndarray,
             print(f"\nClass 1 already has {current_count} samples ≥ target {target_count}. No oversampling done.")
         return X, y, df
 
+    # sm = SMOTE(k_neighbors=2, sampling_strategy={1:target_count, 2:target_count}, random_state=random_seed)
     sm = SMOTE(k_neighbors=2, sampling_strategy={1:target_count}, random_state=random_seed)
     X_over, y_over = sm.fit_resample(X, y)
 
-    df_over = df.reset_index(drop=True)
 
 
     if verbose:
         print(f"\nFinal dataset size after oversampling: {len(y_over):,} samples")
         print("="*70)
 
-    return X_over, y_over, df_over
+    return X_over, y_over, df
 
 def apply_undersampling(
     X: np.ndarray,

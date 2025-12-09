@@ -50,6 +50,59 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'features'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import PCA_VARIANCE_THRESHOLD, RANDOM_STATE, CV_FOLDS, CV_SCORING_METRIC
 
+from sklearn.metrics import make_scorer, classification_report
+import numpy as np
+
+BALL_BAT_STUMP = ["Ball", "Bat", "Stump"]
+BALL_BAT_STUMP_IDS = [1, 2, 3] # Corresponding IDs for Ball, Bat, Stump
+
+def f1_3class(y_true, y_pred):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=["No Object", "Ball", "Bat", "Stump"],
+        output_dict=True,
+        zero_division=0
+    )
+    return np.mean([report[c]["f1-score"] for c in BALL_BAT_STUMP])
+
+def recall_3class(y_true, y_pred):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=["No Object", "Ball", "Bat", "Stump"],
+        output_dict=True,
+        zero_division=0
+    )
+    return np.mean([report[c]["recall"] for c in BALL_BAT_STUMP])
+
+def precision_3class(y_true, y_pred):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=["No Object", "Ball", "Bat", "Stump"],
+        output_dict=True,
+        zero_division=0
+    )
+    return np.mean([report[c]["precision"] for c in BALL_BAT_STUMP])
+
+def accuracy_3class_from_report(y_true, y_pred):
+    """
+    Computes accuracy ONLY for Ball, Bat, Stump using classification_report data.
+    This ignores all NoObject samples.
+    """
+    mask = np.isin(y_true, BALL_BAT_STUMP_IDS)  # keep only Ball, Bat, Stump
+    if mask.sum() == 0:
+        return 0.0
+    return (y_true[mask] == y_pred[mask]).mean()
+
+SCORING = {
+    "f1_macro": make_scorer(f1_3class),
+    "recall_macro": make_scorer(recall_3class),
+    "precision_macro": make_scorer(precision_3class),
+    "accuracy": make_scorer(accuracy_3class_from_report)
+}
+
 
 def train_logistic_regression(X: np.ndarray, y: np.ndarray,
                               tune_hyperparameters: bool = True,
@@ -134,12 +187,19 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
 
     # Cross-validation evaluation
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
+    # cv_results = cross_validate(
+    #     best_pipeline, X, y,
+    #     cv=cv,
+    #     scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+    #     n_jobs=-1
+    # )
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
+    
 
     train_time = time.time() - start_time
 
@@ -256,7 +316,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 
@@ -363,7 +423,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 
@@ -464,7 +524,7 @@ def train_knn(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 
@@ -589,6 +649,22 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         # )
         # best_model.fit(X, y, sample_weight=sample_weights)
 
+        # pipeline = Pipeline([
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=200,
+        #         max_depth=5,
+        #         learning_rate=0.1,
+        #         subsample=0.8,
+        #         colsample_bytree=0.8,
+        #         # objective='multi:softmax',
+        #         num_class=len(classes),
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1,
+        #         eval_metric='aucpr'
+        #     ))
+        # ])
+
         pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('classifier', xgb.XGBClassifier(
@@ -597,23 +673,23 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
                 learning_rate=0.1,
                 subsample=0.8,
                 colsample_bytree=0.8,
-                # objective='multi:softmax',
+                objective='multi:softmax',
                 num_class=len(classes),
                 random_state=RANDOM_STATE,
                 n_jobs=-1,
-                eval_metric='aucpr'
+                eval_metric='mlogloss'
             ))
         ])
 
         pipeline.fit(X, y)
-        best_model = pipeline
+        best_pipeline = pipeline
         
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 

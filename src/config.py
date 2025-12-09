@@ -14,7 +14,7 @@ Module-specific constants (used in only one file) should remain in their respect
 PCA_VARIANCE_THRESHOLD = 0.99  # 99% variance retention
 
 # Random seed for reproducibility
-RANDOM_STATE = 42
+RANDOM_STATE = 44
 
 
 # ============================================================================

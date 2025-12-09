@@ -250,6 +250,9 @@ def main():
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
 
+        # Save features
+        train_df.to_csv(output_dir / 'train_features.csv', index=False)
+
         # Apply undersampling if requested
         if args.undersample:
             print("\n" + "-"*70)
@@ -282,7 +285,7 @@ def main():
             #     verbose=True
             # )
 
-            X_train, y_train, train_df = apply_oversampling(
+            X_train, y_train, _ = apply_oversampling(
                 X_train, y_train, train_df,
                 target_count_ratio=0.95,
                 random_seed=42,
@@ -298,8 +301,6 @@ def main():
             print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
             print("-"*70)
 
-        # Save features
-        train_df.to_csv(output_dir / 'train_features.csv', index=False)
         np.save(output_dir / 'X_train.npy', X_train)
         np.save(output_dir / 'y_train.npy', y_train)
         print(f"Saved training features to {output_dir}")
