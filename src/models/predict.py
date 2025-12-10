@@ -44,6 +44,7 @@ def predict_on_image(model, image: np.ndarray, verbose: bool = False) -> np.ndar
 
     # Predict for all cells
     y_pred = model.predict(X_cells)  # Shape: (64,)
+    y_pred = np.where(y_pred == 4, 0, y_pred)
 
     return y_pred
 

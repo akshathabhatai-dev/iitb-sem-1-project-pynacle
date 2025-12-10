@@ -26,7 +26,7 @@ def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray,
         Dictionary containing evaluation metrics
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
 
     # Predictions
     y_pred = model.predict(X_test)
@@ -98,7 +98,7 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: Dict[int, str] = None,
         normalize: Normalize confusion matrix
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
 
     labels = [class_names[i] for i in sorted(class_names.keys())]
 
@@ -138,7 +138,7 @@ def plot_class_performance(results: Dict, class_names: Dict[int, str] = None,
         save_path: Path to save the plot
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
 
     labels = [class_names[i] for i in sorted(class_names.keys())]
     precision = results['precision']
@@ -183,7 +183,7 @@ def save_metrics_to_file(results: Dict, output_path: str,
         class_names: Dictionary mapping class indices to names
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

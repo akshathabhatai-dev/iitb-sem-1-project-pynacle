@@ -48,14 +48,16 @@ class GridAnnotator:
             0: 'No Object',
             1: 'Ball',
             2: 'Bat',
-            3: 'Stump'
+            3: 'Stump',
+            4: 'No Object (Person)'
         }
 
         self.class_colors = {
             0: (128, 128, 128),  # Gray
             1: (0, 0, 255),      # Red
             2: (139, 69, 19),    # Brown
-            3: (0, 255, 0)   # Green
+            3: (0, 255, 0),   # Green
+            4: (255, 0, 0)       # Blue
         }
 
     def load_annotations(self):
@@ -155,10 +157,12 @@ class GridAnnotator:
         print("  1 = Ball (Red)")
         print("  2 = Bat (Brown)")
         print("  3 = Stump (White)")
+        print("  4 = No Object (Person) (Blue)")
         print("  s = Save and next")
         print("  q = Quit without saving")
         print("  n = Next image (save current)")
         print("  p = Previous image")
+        print("  r = Reject image (delete file & record)")
         print("="*60 + "\n")
 
         while True:
@@ -222,6 +226,9 @@ class GridAnnotator:
             elif key == ord('3'):
                 state['current_label'] = 3
                 print(f"Selected class: {self.class_names[3]}")
+            elif key == ord('4'):
+                state['current_label'] = 4
+                print(f"Selected class: {self.class_names[4]}")
             elif key == ord('s') or key == ord('n'):
                 # Save and next
                 self.annotations[img_name] = cell_labels

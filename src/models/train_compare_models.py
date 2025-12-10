@@ -53,6 +53,7 @@ from config import PCA_VARIANCE_THRESHOLD, RANDOM_STATE, CV_FOLDS, CV_SCORING_ME
 from sklearn.metrics import make_scorer, classification_report
 import numpy as np
 
+CLASS_NAMES = ["NoObject", "Ball", "Bat", "Stump", "OtherNoObjects"]
 BALL_BAT_STUMP = ["Ball", "Bat", "Stump"]
 BALL_BAT_STUMP_IDS = [1, 2, 3] # Corresponding IDs for Ball, Bat, Stump
 
@@ -60,7 +61,7 @@ def f1_3class(y_true, y_pred):
     report = classification_report(
         y_true,
         y_pred,
-        target_names=["No Object", "Ball", "Bat", "Stump"],
+        target_names=CLASS_NAMES,
         output_dict=True,
         zero_division=0
     )
@@ -70,7 +71,7 @@ def recall_3class(y_true, y_pred):
     report = classification_report(
         y_true,
         y_pred,
-        target_names=["No Object", "Ball", "Bat", "Stump"],
+        target_names=CLASS_NAMES,
         output_dict=True,
         zero_division=0
     )
@@ -80,7 +81,7 @@ def precision_3class(y_true, y_pred):
     report = classification_report(
         y_true,
         y_pred,
-        target_names=["No Object", "Ball", "Bat", "Stump"],
+        target_names=CLASS_NAMES,
         output_dict=True,
         zero_division=0
     )
@@ -168,7 +169,7 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            # ('scaler', StandardScaler()),
+            ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 C=1.0,
@@ -294,6 +295,14 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
+        class_weights = {
+            0: 1.0,   # NoObject
+            1: 5.0,   # Ball
+            2: 3.0,   # Bat
+            3: 3.0,   # Stump
+            4: 1.0    # Other No Objects 
+        }
+
         pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -302,11 +311,24 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
                 max_depth=20,
                 min_samples_split=10,
                 min_samples_leaf=5,
-                class_weight='balanced',
+                class_weight=class_weights,
                 random_state=RANDOM_STATE,
                 n_jobs=-1
             ))
         ])
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+        #     ('classifier', RandomForestClassifier(
+        #         n_estimators=200,
+        #         max_depth=20,
+        #         min_samples_split=10,
+        #         min_samples_leaf=5,
+        #         class_weight='balanced',
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1
+        #     ))
+        # ])
 
         pipeline.fit(X, y)
         best_pipeline = pipeline
@@ -405,6 +427,13 @@ def train_svm(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
+        class_weights = {
+            0: 1.0,   # NoObject (majority)
+            1: 8.0,   # Ball (rarest)
+            2: 5.0,   # Bat
+            3: 5.0,   # Stump
+            4: 1.0    # Other No Objects 
+        }
         best_pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -412,7 +441,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
                 C=1.0,
                 kernel='rbf',
                 gamma='scale',
-                class_weight='balanced',
+                class_weight=class_weights,
                 random_state=RANDOM_STATE,
                 max_iter=5000
             ))])
@@ -665,6 +694,36 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         #     ))
         # ])
 
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 8.0,   # Ball
+        #     2: 5.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.0    # Other No Objects 
+        # }
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 9.5,   # Ball
+        #     2: 7.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.8    # Other No Objects 
+        # }
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 9.5,   # Ball
+        #     2: 7.0,   # Bat
+        #     3: 4,   # Stump
+        #     4: 1.2    # Other No Objects 
+        # }
+        class_weights = {
+            0: 1.0,   # NoObject
+            1: 12.0,   # Ball
+            2: 10.0,   # Bat
+            3: 5.0,   # Stump
+            4: 1.2    # Other No Objects 
+        }
+        sample_weights = np.array([class_weights[int(label)] for label in y])
+
         pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('classifier', xgb.XGBClassifier(
@@ -681,7 +740,7 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
             ))
         ])
 
-        pipeline.fit(X, y)
+        pipeline.fit(X, y, classifier__sample_weight=sample_weights)
         best_pipeline = pipeline
         
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)

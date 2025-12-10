@@ -175,7 +175,7 @@ def train_random_forest(X_train: np.ndarray, y_train: np.ndarray,
         # Class distribution
         unique, counts = np.unique(y_train, return_counts=True)
         print("\nClass distribution:")
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
         for cls, count in zip(unique, counts):
             print(f"  {class_names.get(cls, cls)}: {count} ({count/len(y_train)*100:.2f}%)")
 
