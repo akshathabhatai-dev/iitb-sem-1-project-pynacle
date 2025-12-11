@@ -305,7 +305,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
     # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
     # assert len(all_features) == 2176, f"Expected 2176 features, got {len(all_features)}" # remove few features add new feature8/12
-    assert len(all_features) ==  1100, f"Expected  1100 features, got {len(all_features)}" # remove few features add new feature8/12
+    assert len(all_features) ==  1103, f"Expected  1103 features, got {len(all_features)}" # remove few features add new feature8/12
     # assert len(all_features) == 2169, f"Expected 2169 features, got {len(all_features)}" # remove few features 8/12
     # assert len(all_features) == 4445, f"Expected 4445 features, got {len(all_features)}" # with normal hog all features
     # assert len(all_features) == 3121, f"Expected 3121 features, got {len(all_features)}" # with normal hog all features
@@ -346,8 +346,9 @@ def get_all_feature_names() -> List[str]:
     all_names.extend(get_lab_color_feature_names())   # 3
     all_names.extend(get_circularity_feature_names())   # 1
     all_names.extend(get_edge_density_feature_names())   # 3
+
     # all_names.extend(get_smoothness_feature_names())   # 1
-    all_names.extend(get_polygon_feature_names())   # 1
+    all_names.extend(get_polygon_feature_names())   # 1 # To be removed
     # all_names.extend(get_sift_feature_names(max_features=5))   # 640
     # all_names.extend(get_orb_feature_names(max_features=10))   # 320
     # all_names.extend(get_sift_feature_names())   # 16384
@@ -360,23 +361,23 @@ def get_all_feature_names() -> List[str]:
     # Phase 2 features (36)
     all_names.extend(get_morphological_feature_names())   # 8
     # all_names.extend(get_sift_feature_names())            # 14 abhi
-    all_names.extend(get_enhanced_texture_feature_names()) # 14
+    all_names.extend(get_enhanced_texture_feature_names()) # 14 # To be removed
 
     # Phase 3 features (30)
-    all_names.extend(get_superpixel_feature_names())      # 12
-    all_names.extend(get_haar_feature_names())            # 10
-    all_names.extend(get_advanced_color_moment_names())   # 8
+    all_names.extend(get_superpixel_feature_names())      # 12 # To be removed
+    all_names.extend(get_haar_feature_names())            # 10 # To be removed
+    all_names.extend(get_advanced_color_moment_names())   # 8 # To be removed
 
     # Phase 4A features (20)
     all_names.extend(get_chromaticity_feature_names())    # 14
-    all_names.extend(get_yuv_feature_names())             # 6
+    all_names.extend(get_yuv_feature_names())             # 6 # To be removed
 
     # Phase 4B features (7)
-    all_names.extend(get_hough_feature_names())           # 7
+    all_names.extend(get_hough_feature_names())           # 7 # To be removed
 
     # Phase 4C features (15)
     all_names.extend(get_laws_texture_feature_names())    # 9
-    all_names.extend(get_fourier_texture_feature_names()) # 6
+    all_names.extend(get_fourier_texture_feature_names()) # 6 # To be removed
 
     # all_names.extend(get_spatial_context_feature_names()) # 25
 
@@ -384,7 +385,7 @@ def get_all_feature_names() -> List[str]:
     # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
     # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
     # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
-    assert len(all_names) ==  1100, f"Expected  1100 features, got {len(all_names)}" # remove few features add new feature8/12
+    assert len(all_names) ==  1103, f"Expected  1103 features, got {len(all_names)}" # remove few features add new feature8/12
     # assert len(all_names) == 2176, f"Expected 2176 features, got {len(all_names)}" # remove few features add new feature8/12
     # assert len(all_names) == 2169, f"Expected 2169 features, got {len(all_names)}" # remove few features 8/12
     # assert len(all_names) == 4445, f"Expected 4445 features, got {len(all_names)}" # with normal hog all features

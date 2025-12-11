@@ -1,7 +1,7 @@
 """
 Enhanced Color Features for Cricket Object Detection
 
-This module extracts 18 advanced color features specifically designed for
+This module extracts 21 advanced color features specifically designed for
 detecting red cricket balls in varying lighting conditions.
 
 Features breakdown:
@@ -20,7 +20,7 @@ from typing import List
 
 def extract_enhanced_color_features(cell_rgb: np.ndarray) -> np.ndarray:
     """
-    Extract 18 enhanced color features from RGB cell.
+    Extract 21 enhanced color features from RGB cell.
 
     Critical for ball detection - current system only detects 3/17 balls (F1: 0.0619).
     These features provide red-specific discrimination that basic RGB/HSV lack.
@@ -30,12 +30,11 @@ def extract_enhanced_color_features(cell_rgb: np.ndarray) -> np.ndarray:
                  Expected size: 75x100 pixels
 
     Returns:
-        Array of 18 float32 features
+        Array of 21 float32 features
     """
     # Ensure we have a valid image
     if cell_rgb.size == 0:
-        return np.zeros(18, dtype=np.float32)
-
+        return np.zeros(21, dtype=np.float32)
     # OpenCV uses BGR, so we need to handle color channels correctly
     # BGR format: cell_rgb[:,:,0]=Blue, cell_rgb[:,:,1]=Green, cell_rgb[:,:,2]=Red
     B = cell_rgb[:, :, 0].astype(np.float32)
@@ -84,6 +83,9 @@ def extract_enhanced_color_features(cell_rgb: np.ndarray) -> np.ndarray:
     # Red hue wraparound in HSV: 0-10 and 170-180 (in OpenCV's 0-180 scale)
     # This handles the discontinuity at 0/360 degrees
     red_hue_mask = ((H >= 0) & (H <= 10)) | ((H >= 170) & (H <= 180))
+    red_ratio = np.mean((H < 10) | (H > 160))
+    brown_ratio = np.mean((H > 10) & (H < 25))
+    blue_ratio = np.mean((H > 90) & (H < 130))
 
     # 7. Percentage of pixels in red hue range
     hue_red_wraparound_pct = np.mean(red_hue_mask)
@@ -181,6 +183,9 @@ def extract_enhanced_color_features(cell_rgb: np.ndarray) -> np.ndarray:
         red_hue_std,
         v_channel_at_red_hues,
         s_channel_at_red_hues,
+        red_ratio,
+        brown_ratio,
+        blue_ratio,
 
         # LAB Color Space (6)
         lab_a_mean,
@@ -191,8 +196,8 @@ def extract_enhanced_color_features(cell_rgb: np.ndarray) -> np.ndarray:
         lab_color_distance_to_red
     ], dtype=np.float32)
 
-    # Verify we have exactly 18 features
-    assert len(features) == 18, f"Expected 18 features, got {len(features)}"
+    # Verify we have exactly 21 features
+    assert len(features) == 21, f"Expected 21 features, got {len(features)}"
 
     # Replace any NaN or Inf values with 0.0 (defensive programming)
     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
@@ -202,10 +207,10 @@ def extract_enhanced_color_features(cell_rgb: np.ndarray) -> np.ndarray:
 
 def get_enhanced_color_feature_names() -> List[str]:
     """
-    Get names of all 18 enhanced color features.
+    Get names of all 21 enhanced color features.
 
     Returns:
-        List of 18 feature names
+        List of 21 feature names
     """
     names = [
         # Red Dominance (6)
@@ -223,6 +228,9 @@ def get_enhanced_color_feature_names() -> List[str]:
         'red_hue_std',
         'v_channel_at_red_hues',
         's_channel_at_red_hues',
+        'red_ratio',
+        'brown_ratio',
+        'blue_ratio',
 
         # LAB Color Space (6)
         'lab_a_mean',
@@ -233,7 +241,7 @@ def get_enhanced_color_feature_names() -> List[str]:
         'lab_color_distance_to_red'
     ]
 
-    assert len(names) == 18, f"Expected 18 feature names, got {len(names)}"
+    assert len(names) == 21, f"Expected 21 feature names, got {len(names)}"
 
     return names
 

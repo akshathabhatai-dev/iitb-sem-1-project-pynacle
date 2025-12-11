@@ -26,10 +26,45 @@ def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray,
         Dictionary containing evaluation metrics
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
 
     # Predictions
     y_pred = model.predict(X_test)
+    # y_pred = np.where(y_pred == 4, 0, y_pred)  # Map 'Other No Objects ' to 'No Object'
+    # y_test = np.where(y_test == 4, 0, y_test)  # Map 'Other No Objects ' to 'No Object'
+    # THRESHOLDS = {
+    #     0: 0.5,   # No Object
+    #     1: 0.25,  # Ball
+    #     2: 0.30,  # Bat
+    #     3: 0.30   # Stump
+    # }
+    # probs = model.predict_proba(X_test)
+    # y_pred = []
+    # thresholds = [0.50, 0.30, 0.30, 0.30]  # class-wise thresholds
+
+    # # final_pred = []
+    # for p in probs:
+    #     idx = np.argmax(p / thresholds)  # boost minority classes
+    #     y_pred.append(idx)
+    # for row in probs:
+    #     adjusted = [1 if p >= THRESHOLDS[i] else 0 for i, p in enumerate(row)]
+    #     # If multiple 1s, choose max prob
+    #     if sum(adjusted) > 1:
+    #         y_pred.append(np.argmax(row))
+    #     elif sum(adjusted) == 0:
+    #         y_pred.append(np.argmax(row))  # fallback
+    #     else:
+    #         y_pred.append(adjusted.index(1))
+
+    # for p in proba:
+    #     if p[1] > 0.45:
+    #         y_pred.append(1)   # Ball
+    #     elif p[2] > 0.40:
+    #         y_pred.append(2)   # Bat
+    #     elif p[3] > 0.45:
+    #         y_pred.append(3)   # Stump
+    #     else:
+    #         y_pred.append(0)
 
     # Overall accuracy
     accuracy = accuracy_score(y_test, y_pred)
@@ -98,7 +133,7 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: Dict[int, str] = None,
         normalize: Normalize confusion matrix
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
 
     labels = [class_names[i] for i in sorted(class_names.keys())]
 
@@ -138,7 +173,7 @@ def plot_class_performance(results: Dict, class_names: Dict[int, str] = None,
         save_path: Path to save the plot
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
 
     labels = [class_names[i] for i in sorted(class_names.keys())]
     precision = results['precision']
@@ -183,7 +218,7 @@ def save_metrics_to_file(results: Dict, output_path: str,
         class_names: Dictionary mapping class indices to names
     """
     if class_names is None:
-        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+        class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

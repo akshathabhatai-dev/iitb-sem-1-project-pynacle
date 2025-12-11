@@ -14,7 +14,7 @@ from collections import Counter
 from imblearn.over_sampling import SMOTE
 
 def print_class_distribution(y):
-    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
     unique, counts = np.unique(y, return_counts=True)
     total = len(y)
     for cls, count in zip(unique, counts):
@@ -169,7 +169,7 @@ def apply_undersampling(
     target_ratio: str = 'max_minority',
     random_seed: int = 42,
     verbose: bool = True,
-    target_count_ratio: Optional[float] = 1.25
+    target_count_ratio: Optional[float] = 1.0
 ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
     """
     Apply undersampling to balance class distribution.
@@ -210,17 +210,18 @@ def apply_undersampling(
 
     # Get indices for each class
     class_0_indices = np.where(y == 0)[0]
-    class_4_indices = np.where(y == 4)[0]
-    minority_indices = np.where((y != 0) & (y != 4))[0]
+    # class_4_indices = np.where(y == 4)[0]
+    # minority_indices = np.where((y != 0) & (y != 4))[0]
+    minority_indices = np.where((y != 0))[0]
 
     if strategy == 'image_stratified':
         # Image-stratified undersampling
         undersampled_class_0_indices = image_stratified_undersample(
             df, class_0_indices, target_count, random_seed
         )
-        undersampled_class_4_indices = image_stratified_undersample(
-            df, class_4_indices, target_count, random_seed
-        )
+        # undersampled_class_4_indices = image_stratified_undersample(
+        #     df, class_4_indices, target_count, random_seed
+        # )
     elif strategy == 'random':
         # Random undersampling
         undersampled_class_0_indices = np.random.choice(
@@ -228,16 +229,16 @@ def apply_undersampling(
             size=min(target_count, len(class_0_indices)),
             replace=False
         )
-        undersampled_class_4_indices = np.random.choice(
-            class_4_indices,
-            size=min(target_count, len(class_4_indices)),
-            replace=False
-        )
+        # undersampled_class_4_indices = np.random.choice(
+        #     class_4_indices,
+        #     size=min(target_count, len(class_4_indices)),
+        #     replace=False
+        # )
     else:
         raise ValueError(f"Unknown strategy: {strategy}. Choose 'image_stratified' or 'random'.")
 
     # Combine indices
-    final_indices = np.concatenate([undersampled_class_0_indices, undersampled_class_4_indices, minority_indices])
+    final_indices = np.concatenate([undersampled_class_0_indices, minority_indices])
     np.random.shuffle(final_indices)  # Shuffle to avoid class ordering bias
 
     # Apply undersampling
@@ -323,7 +324,7 @@ def image_stratified_undersample(
 
 def print_class_distribution(y: np.ndarray) -> None:
     """Print class distribution statistics."""
-    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
     unique, counts = np.unique(y, return_counts=True)
     total = len(y)
 
@@ -350,7 +351,7 @@ def get_undersampling_report(
     original_counts = Counter(y_original)
     undersampled_counts = Counter(y_undersampled)
 
-    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump', 4: 'Other No Objects '}
+    class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
 
     report_data = []
     for cls in sorted(original_counts.keys()):

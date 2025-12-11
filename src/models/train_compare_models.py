@@ -21,8 +21,11 @@ import time
 from pathlib import Path
 from typing import Dict, Tuple, Any
 import warnings
+
+from sklearn.calibration import CalibratedClassifierCV
 warnings.filterwarnings('ignore')
 
+from sklearn import tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
@@ -30,11 +33,12 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, cross_validate, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, cross_validate, StratifiedKFold, cross_val_score
 from sklearn.metrics import (
     accuracy_score, f1_score, precision_score, recall_score,
     classification_report, confusion_matrix
 )
+# from sklearn.model_selection import cross_val_score
 from sklearn.decomposition import PCA
 from sklearn.utils.class_weight import compute_class_weight
 import xgboost as xgb
@@ -53,9 +57,11 @@ from config import PCA_VARIANCE_THRESHOLD, RANDOM_STATE, CV_FOLDS, CV_SCORING_ME
 from sklearn.metrics import make_scorer, classification_report
 import numpy as np
 
-CLASS_NAMES = ["NoObject", "Ball", "Bat", "Stump", "OtherNoObjects"]
-BALL_BAT_STUMP = ["Ball", "Bat", "Stump"]
-BALL_BAT_STUMP_IDS = [1, 2, 3] # Corresponding IDs for Ball, Bat, Stump
+# CLASS_NAMES = ["NoObject", "Ball", "Bat", "Stump", "OtherNoObjects"]
+CLASS_NAMES = ["NoObject", "Ball", "Bat", "Stump"]
+BALL_BAT_STUMP = ["Ball", "Bat", "Stump", "NoObject"]
+# BALL_BAT_STUMP = ["NoObject", "Ball", "Bat", "Stump", "OtherNoObjects"]
+BALL_BAT_STUMP_IDS = [0, 1, 2, 3] # Corresponding IDs for Ball, Bat, Stump
 
 def f1_3class(y_true, y_pred):
     report = classification_report(
@@ -715,32 +721,337 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         #     3: 4,   # Stump
         #     4: 1.2    # Other No Objects 
         # }
-        class_weights = {
-            0: 1.0,   # NoObject
-            1: 12.0,   # Ball
-            2: 10.0,   # Bat
-            3: 5.0,   # Stump
-            4: 1.2    # Other No Objects 
-        }
-        sample_weights = np.array([class_weights[int(label)] for label in y])
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 12.0,   # Ball
+        #     2: 10.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.2    # Other No Objects 
+        # }
 
+        # class_weights = {
+        #     0: 1.0,   # NoObject (baseline)
+        #     4: 1.1,   # Other NoObjects (small upweight)
+        #     1: 3.5,   # Ball  (strong upweight — rare & important)
+        #     2: 2.0,   # Bat   (moderate)
+        #     3: 1.5    # Stump (mild)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 2.5,   # Ball
+        #     2: 1.5,   # Bat
+        #     3: 1.2,   # Stump
+        #     4: 1.0
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.2,
+        #     1: 4.0,   # Ball (moderate boost)
+        #     2: 2.5,   # Bat
+        #     3: 1.8    # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.0,
+        #     1: 3.2,   # Ball (reduced from 4 → increase precision)
+        #     2: 2.2,   # Bat (reduced from 2.5)
+        #     3: 2.0    # Stump (increase slightly to boost recall/precision balance)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,     # No Object
+        #     4: 1.0,     # Other No Object
+        #     1: 2.8,     # Ball (↓ from 3.2 → reduce false positives)
+        #     2: 1.8,     # Bat  (↓ from 2.2)
+        #     3: 1.6      # Stump (↓ slightly from 2.0)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.0,
+        #     1: 2.8,   # Ball (unchanged)
+        #     2: 2.1,   # Bat (↑ from 1.8)
+        #     3: 1.5    # Stump (↓ from 1.6)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.0,
+        #     1: 2.6,   # Ball (slightly down)
+        #     2: 2.4,   # Bat (UP — Bat needs stronger boosting)
+        #     3: 1.4    # Stump (down — overpredicting Bat)
+        # }
+
+        # class_weights = {
+        #     0: 0.9,    # NoObject → reduce dominance
+        #     # 4: 0.9,    # Other NoObject → match class 0
+        #     1: 2.6,    # Ball → keep stable
+        #     2: 2.7,    # Bat → increase to improve precision
+        #     3: 1.3     # Stump → reduce slightly to reduce confusion with Bat
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 3.5,
+        #     2: 2.2,
+        #     3: 1.8,
+        #     # 4: 1.0
+        # }
+
+        # class_weights = {
+        #     0: 0.8,   # No Object
+        #     1: 2.0,   # Ball
+        #     2: 1.1,   # Bat
+        #     3: 0.8    # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 2.55,
+        #     2: 1.36,
+        #     3: 1.0
+        # }
+
+        # class_weights = {
+        #     0: 1.0,     # No Object
+        #     1: 1.8,     # Ball
+        #     2: 1.5,     # Bat
+        #     3: 1.2      # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,     # No Object
+        #     1: 1.8,     # Ball
+        #     2: 1.5,     # Bat
+        #     3: 1.2      # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 5.0,
+        #     2: 3.0,
+        #     3: 3.0
+        # }
+        # class_weights = {0:0.5, 1:3.0, 2:2.0, 3:2.5}
+        class_weights = {
+            0: 0.25,
+            1: 11.0,
+            2: 6.0,
+            3: 4.3
+        }
+
+        # print("Using class weights:", class_weights)
+        # sample_weights = np.array([class_weights[int(label)] for label in y])
+        def compute_sample_weights(y, class_weights, normalize_mean=True):
+            # y : numpy array of integer labels
+            w = np.array([class_weights[int(c)] for c in y], dtype=float)
+            if normalize_mean:
+                w = w / w.mean()         # keeps average loss scale stable (recommended)
+            return w
+        # sample_weights = compute_sample_weights(y, class_weights, normalize_mean=True)
+        sample_weights = compute_sample_weights(y, class_weights)
+        # pipeline = Pipeline([
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=600,
+        #         max_depth=4,
+        #         learning_rate=0.03,
+        #         min_child_weight=6,
+        #         gamma=1.0,
+        #         subsample=0.8,
+        #         colsample_bytree=0.8,
+        #         reg_lambda=1.0,
+        #         reg_alpha=0.2,
+        #         use_label_encoder=False,
+        #         eval_metric="mlogloss",
+        #         objective='multi:softmax',
+        #         num_class=len(classes),
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1
+        #     ))
+        # ])
+        # class_counts = np.bincount(y)
+        # total = len(y)
+        # weights = total / (len(class_counts) * class_counts)
+        # sample_weights = np.array([weights[y] for y in y])         
+
+        # print(weights)
+
+        # pipeline = Pipeline([
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=600,
+        #         max_depth=8,
+        #         min_child_weight = 3,
+        #         gamma = 1.0,
+        #         lambda_ = 0.8,
+        #         alpha = 0.3,
+        #         learning_rate=0.03,
+        #         subsample=0.9,
+        #         colsample_bytree=0.9,
+        #         objective='multi:softprob',
+        #         tree_method='hist',
+        #         num_class=len(classes),
+        #         scale_pos_weight=None, # using sample_weight instead
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1,
+        #         eval_metric='mlogloss',
+        #         # class_weights=class_weights
+        #     ))
+        # ])
+        # unique, counts = np.unique(y, return_counts=True)
+        # class_counts = dict(zip(unique, counts))
+        # total = len(y)
+        # n_classes = len(unique)
+
+        # # inverse-frequency normalized weights
+        # class_weight = {int(c): total / (n_classes * count) for c, count in class_counts.items()}
+
+        # # Example: class_weight might be {0:0.28, 1:12.57, ...}
+        # print("Per-class weight (normalized):", class_weight)
+
+        # # create per-sample weights array to pass to fit()
+        # sample_weights = np.array([class_weight[int(y)] for y in y], dtype=float)
+
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=400,
+        #         max_depth=7,
+        #         learning_rate=0.03,
+        #         min_child_weight=3,
+        #         gamma=0.5,
+        #         subsample=0.85,
+        #         colsample_bytree=0.85,
+        #         objective="multi:softprob",
+        #         num_class=len(classes),
+        #         tree_method="hist",
+        #         random_state=42,
+        #         n_jobs=-1,
+        #         eval_metric="mlogloss",
+        #     ))
+        # ])
+
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=500,
+        #         max_depth=7,
+        #         learning_rate=0.05,
+        #         min_child_weight=3,
+        #         gamma=2.5,
+        #         subsample=0.85,
+        #         colsample_bytree=0.85,
+        #         objective="multi:softprob",
+        #         num_class=len(classes),
+        #         tree_method="hist",
+        #         random_state=42,
+        #         n_jobs=-1,
+        #         eval_metric="mlogloss",
+        #     ))
+        # ])
+
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=800,
+        #         max_depth=7,
+        #         learning_rate=0.05,
+        #         min_child_weight=10,
+        #         gamma=4,
+        #         max_delta_step=2, 
+        #         subsample=0.7,
+        #         colsample_bytree=0.7,
+        #         eta=0.02,
+        #         num_parallel_tree=1,
+        #         objective="multi:softprob",
+        #         num_class=len(classes),
+        #         tree_method="hist",
+        #         random_state=42,
+        #         n_jobs=-1,
+        #         eval_metric="mlogloss",
+        #     ))
+        # ])
+        # class_weights = {0: 0.25, 1: 11.0, 2: 6.0, 3: 4.3}
+        # sample_weights = np.array([class_weights[y_wt] for y_wt in y])
+
+        model = xgb.XGBClassifier(
+            objective='multi:softprob',
+            num_class=4,
+            n_estimators=800,
+            max_depth=3,
+            learning_rate=0.02,
+            subsample=0.7,
+            colsample_bytree=0.7,
+            gamma=4,
+            min_child_weight=10,
+            max_delta_step=2,
+            eval_metric='mlogloss',
+            tree_method='hist',
+            n_jobs=-1
+        )
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('classifier', xgb.XGBClassifier(
-                n_estimators=200,
-                max_depth=5,
-                learning_rate=0.1,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                objective='multi:softmax',
-                num_class=len(classes),
-                random_state=RANDOM_STATE,
-                n_jobs=-1,
-                eval_metric='mlogloss'
-            ))
+            ('classifier', model)
         ])
 
+
+
         pipeline.fit(X, y, classifier__sample_weight=sample_weights)
+
+        # calibrated_model = CalibratedClassifierCV(
+        #     base_estimator=pipeline,
+        #     cv="prefit",          # <-- important!
+        #     method="sigmoid"
+        # )
+        # xgb_model = xgb.XGBClassifier(
+        #     n_estimators=300,
+        #     max_depth=6,
+        #     min_child_weight=5,
+        #     learning_rate=0.05,
+        #     subsample=0.8,
+        #     colsample_bytree=0.8,
+        #     objective="multi:softprob",
+        #     eval_metric="mlogloss",
+        #     n_jobs=-1,
+        # )
+
+        # pipeline = Pipeline([
+        #     ("scaler", StandardScaler()),
+        #     ("calib", CalibratedClassifierCV(
+        #         base_estimator=xgb_model,
+        #         cv=5,
+        #         method="sigmoid"
+        #     ))
+        # ])
+
+        # pipeline = Pipeline([
+        #     ("scaler", StandardScaler()),
+        #     ("calib", CalibratedClassifierCV(
+        #         estimator=xgb.XGBClassifier(
+        #             n_estimators=300,
+        #             max_depth=6,
+        #             min_child_weight=5,
+        #             gamma=2.0,
+        #             reg_lambda=1.2,
+        #             reg_alpha=0.4,
+        #             learning_rate=0.05,
+        #             subsample=0.8,
+        #             colsample_bytree=0.8,
+        #             objective="multi:softprob",
+        #             eval_metric="mlogloss",
+        #             random_state=42,
+        #             n_jobs=-1
+        #         ),
+        #         cv=5,
+        #         method="sigmoid"
+        #     ))
+        # ])
+
+        # calibrated_model.fit(X_val, y_val)
+        pipeline.fit(X, y)
         best_pipeline = pipeline
         
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
@@ -749,6 +1060,8 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         best_pipeline, X, y,
         cv=cv,
         scoring=SCORING,
+        # fit_params={"classifier__sample_weight": sample_weights},
+        # return_estimator=True,
         n_jobs=-1
     )
 
