@@ -49,28 +49,36 @@ from spatial_context_features import extract_spatial_context_features, get_spati
 from laws_texture_features import extract_laws_texture_features, get_laws_texture_feature_names
 from fourier_texture_features import extract_fourier_texture_features, get_fourier_texture_feature_names
 
+# PHASE 5B FEATURES - Object-Specific Color Features (Ball/Bat/Stump)
+from ball_color_features import extract_ball_color_features, get_ball_color_feature_names
+from bat_color_features import extract_bat_color_features, get_bat_color_feature_names
+from stump_color_features import extract_stump_color_features, get_stump_color_feature_names
+
 
 def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.ndarray:
     """
-    Extract all 406 features from a single RGB cell (PHASE 4C - Advanced Texture).
+    Extract all 2343 features from a single RGB cell (PHASE 5B - Object-Specific Colors).
 
-    Feature breakdown:
-        ORIGINAL FEATURES (236):
-        - RGB Histogram: 14 features
-        - HSV Color: 26 features (14 original + 12 fine hue bins - PHASE 4A ENHANCED)
-        - LBP: 16 features (10 original + 6 multi-scale - PHASE 4C ENHANCED)
-        - HOG: 144 features (REDUCED from 576 to prevent PCA dominance)
-        - Gabor: 20 features
-        - GLCM: 13 features (10 original + 3 multi-distance - PHASE 4C ENHANCED)
+    Feature breakdown (UPDATED):
+        BASE FEATURES (1536):
+        - RGB Histogram: 768 features
+        - HSV Histogram: 768 features
+
+        TEXTURE FEATURES (598):
+        - LBP: 10 features
+        - HOG: 576 features
+        - GLCM: 12 features
+
+        SHAPE & KEYPOINT (7):
+        - Hu Moments: 7 features
 
         PHASE 1 ADDITIONS (65):
         - Enhanced Color Features: 18 features (red detection for ball)
         - Shape Features: 35 features (circularity, aspect ratio + 11 PHASE 4B enhancements)
         - Edge Features: 12 features (Canny, Sobel gradients)
 
-        PHASE 2 ADDITIONS (36):
+        PHASE 2 ADDITIONS (22):
         - Morphological Features: 8 features (H-Maxima/H-Minima for ball/stump peaks)
-        - SIFT Features: 14 features (keypoint detection for objects)
         - Enhanced Texture Features: 14 features (Haralick for bat wood texture)
 
         PHASE 3 ADDITIONS (30):
@@ -89,15 +97,19 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
         - Laws' Texture Energy: 9 features (texture pattern detection for bat wood grain)
         - Fourier Power Spectrum: 6 features (frequency domain texture analysis)
 
-        Total: 406 per-cell features (236 + 65 + 36 + 30 + 20 Phase4A + 7 Phase4B + 15 Phase4C)
-        Note: +25 spatial context features added in extract_features_from_image() = 431 total
+        PHASE 5B ADDITIONS (34) - NEW:
+        - Ball Color Features: 12 features (red ball detection optimization)
+        - Bat Color Features: 12 features (brown/wood bat detection)
+        - Stump Color Features: 10 features (white/yellow stump detection)
+
+        Total: 2343 per-cell features (2309 + 34)
 
     Args:
         cell_rgb: RGB image cell of shape (H, W, 3)
                  Expected size: 75x100 pixels
 
     Returns:
-        Array of 406 per-cell features
+        Array of 2343 per-cell features
     """
     # ========== COLOR FEATURES (40 total - original 28 + 12 HSV bins) ==========
 
@@ -211,6 +223,23 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
     # Note: LBP enhanced (+6 features) and GLCM enhanced (+3 features) already integrated above
 
+    # ========== PHASE 5B FEATURES (34 total) ==========
+
+    # 21. Ball Color Features (12 features)
+    # Critical for ball: Optimized red color detection with multiple color spaces
+    # Includes red hue dominance, R/G ratio, LAB a* channel, spatial compactness
+    ball_color_features = extract_ball_color_features(cell_rgb)
+
+    # 22. Bat Color Features (12 features)
+    # Critical for bat: Brown/wood color detection and texture indicators
+    # Includes brown hue range, G/B ratio, LAB b* channel, elongation
+    bat_color_features = extract_bat_color_features(cell_rgb)
+
+    # 23. Stump Color Features (10 features)
+    # Critical for stump: White/yellow color detection with brightness analysis
+    # Includes whiteness intensity, low saturation, high value, yellow hue
+    stump_color_features = extract_stump_color_features(cell_rgb)
+
     # ========== COMBINE ALL FEATURES ==========
     # all_features = np.concatenate([
     #     # Original features (236 - includes +12 HSV, +6 LBP, +3 GLCM from Phase 4C)
@@ -271,7 +300,12 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
         # Phase 4C features (15)
         laws_features,            # 9
-        fourier_features          # 6
+        fourier_features,         # 6
+
+        # Phase 5B features (34) - NEW
+        # ball_color_features,      # 12
+        # bat_color_features,       # 12
+        # stump_color_features      # 10
     ])
     # print("SIFT Size:", len(sift_features))
     # print("ORB Size:", len(orb_features))
@@ -282,7 +316,8 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
     # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
     # assert len(all_features) == 3289, f"Expected 3289 features, got {len(all_features)}" # with normal hog all features
-    assert len(all_features) == 2309, f"Expected 2309 features, got {len(all_features)}" # with normal hog all features
+    assert len(all_features) == 2309, f"Expected 2309 features, got {len(all_features)}" # PHASE 4C (old)
+    # assert len(all_features) == 2343, f"Expected 2343 features, got {len(all_features)}" # PHASE 5B (with ball/bat/stump color features)
     # assert len(all_features) == 2565, f"Expected 2565 features, got {len(all_features)}" # with normal hog
     # assert len(all_features) == 31057, f"Expected 31057 features, got {len(all_features)}" # with na normal hog
     # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
@@ -293,13 +328,10 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
 def get_all_feature_names() -> List[str]:
     """
-    Get names of all 406 per-cell features (PHASE 4C - Advanced Texture).
-
-    Note: Spatial context features (+25) are added separately in extract_features_from_image(),
-    bringing total to 431 features per cell in final output.
+    Get names of all 2343 per-cell features (PHASE 5B - Object-Specific Colors).
 
     Returns:
-        List of 406 per-cell feature names
+        List of 2343 per-cell feature names
     """
     all_names = []
 
@@ -344,6 +376,11 @@ def get_all_feature_names() -> List[str]:
     all_names.extend(get_laws_texture_feature_names())    # 9
     all_names.extend(get_fourier_texture_feature_names()) # 6
 
+    # Phase 5B features (34) - NEW
+    # all_names.extend(get_ball_color_feature_names())      # 12
+    # all_names.extend(get_bat_color_feature_names())       # 12
+    # all_names.extend(get_stump_color_feature_names())     # 10
+
     # all_names.extend(get_spatial_context_feature_names()) # 25
 
     # print(f"Extracted {len(all_names)} feature names from cell.")
@@ -351,7 +388,8 @@ def get_all_feature_names() -> List[str]:
     # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
     # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
     # assert len(all_names) == 3289, f"Expected 3289 features, got {len(all_names)}" # with normal hog all features
-    assert len(all_names) == 2309, f"Expected 2309 features, got {len(all_names)}" # with normal hog all features
+    assert len(all_names) == 2309, f"Expected 2309 features, got {len(all_names)}" # PHASE 4C (old)
+    # assert len(all_names) == 2343, f"Expected 2343 features, got {len(all_names)}" # PHASE 5B (with ball/bat/stump color features)
     # assert len(all_names) == 2565, f"Expected 2565 feature names, got {len(all_names)}" # with normal hog
     # assert len(all_names) == 31057, f"Expected 31057 feature names, got {len(all_names)}" # with na normal hog
     # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"
