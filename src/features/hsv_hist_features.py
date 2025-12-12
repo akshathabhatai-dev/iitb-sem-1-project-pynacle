@@ -54,7 +54,7 @@ def rgb_to_hsv(cell_rgb: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(cell_rgb, cv2.COLOR_BGR2HSV)
 
 
-def get_hsv_hist_feature_names(no_of_bins=256) -> List[str]:
+def get_hsv_hist_color_feature_names(no_of_bins=256) -> List[str]:
     """
     Returns the **names of all 768 HSV histogram features**.
 
