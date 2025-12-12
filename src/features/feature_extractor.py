@@ -58,7 +58,7 @@ from spatial_context_features import extract_spatial_context_features, get_spati
 from laws_texture_features import extract_laws_texture_features, get_laws_texture_feature_names
 from fourier_texture_features import extract_fourier_texture_features, get_fourier_texture_feature_names
 from bg_removal import apply_mask, best_cricket_mask
-from shape_structure_features import extract_shape_features, get_shape_feature_names
+from shape_structure_features import extract_shape_structure_features, get_shape_structure_feature_names
 
 
 def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.ndarray:
@@ -127,7 +127,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
     lab_color_features = extract_lab_color_features(cell_rgb)
 
-    # shape_feats = extract_shape_features(cell_rgb)   # list of floats # needed?
+    shape_feats = extract_shape_features(cell_rgb)   # list of floats # needed?
     # ========== TEXTURE FEATURES (60 total) ==========
 
     # Convert to grayscale for texture features
@@ -165,7 +165,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
     # 8. Shape Features (24 features)
     # Critical for ball (circularity), bat (aspect ratio), stump (vertical)
-    shape_features = extract_shape_features(cell_rgb)
+    # shape_features = extract_shape_structure_features(cell_rgb)
 
     # 9. Edge Features (12 features)
     # Critical for object boundaries and orientation
@@ -278,7 +278,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
         # Phase 1 features (65 - includes +11 Shape from Phase 4B)
         enhanced_color_features,  # 18
-        shape_features,           # 35 (PHASE 4B: 24 original + 11 enhancements)
+        # shape_features,           # 35 (PHASE 4B: 24 original + 11 enhancements)
         edge_features,            # 12
 
         # Phase 2 features (36)
@@ -302,6 +302,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
         laws_features,            # 9
         fourier_features,         # 6
         # shape_features,           # 35 # needed?
+        shape_feats
     ])
     # print("SIFT Size:", len(sift_features))
     # print("ORB Size:", len(orb_features))
@@ -312,7 +313,7 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
     # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
     # assert len(all_features) == 2176, f"Expected 2176 features, got {len(all_features)}" # remove few features add new feature8/12
-    assert len(all_features) == 1534, f"Expected 1534 features, got {len(all_features)}" # remove few features add new feature8/12
+    assert len(all_features) == 1541, f"Expected 1541 features, got {len(all_features)}" # remove few features add new feature8/12
     # assert len(all_features) ==  1954, f"Expected  1954 features, got {len(all_features)}" # remove few features add new feature8/12 # needed?
     # assert len(all_features) == 2169, f"Expected 2169 features, got {len(all_features)}" # remove few features 8/12
     # assert len(all_features) == 4445, f"Expected 4445 features, got {len(all_features)}" # with normal hog all features
@@ -386,7 +387,7 @@ def get_all_feature_names() -> List[str]:
     # Phase 4C features (15)
     all_names.extend(get_laws_texture_feature_names())    # 9
     all_names.extend(get_fourier_texture_feature_names()) # 6 # To be removed
-    # all_names.extend(get_shape_feature_names())           # 35 # needed?
+    # all_names.extend(get_shape_structure_feature_names())           # 35 # needed?
 
     # all_names.extend(get_spatial_context_feature_names()) # 25
 
@@ -394,7 +395,7 @@ def get_all_feature_names() -> List[str]:
     # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
     # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
     # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
-    assert len(all_names) == 1534, f"Expected 1534 features, got {len(all_names)}" # remove few features add new feature8/12
+    assert len(all_names) == 1541, f"Expected 1541 features, got {len(all_names)}" # remove few features add new feature8/12
     # assert len(all_names) == 2176, f"Expected 2176 features, got {len(all_names)}" # remove few features add new feature8/12
     # assert len(all_names) == 2169, f"Expected 2169 features, got {len(all_names)}" # remove few features 8/12
     # assert len(all_names) == 4445, f"Expected 4445 features, got {len(all_names)}" # with normal hog all features
