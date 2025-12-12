@@ -38,7 +38,6 @@ from sklearn.metrics import (
     accuracy_score, f1_score, precision_score, recall_score,
     classification_report, confusion_matrix
 )
-# from sklearn.model_selection import cross_val_score
 from sklearn.decomposition import PCA
 from sklearn.utils.class_weight import compute_class_weight
 import xgboost as xgb
@@ -177,7 +176,7 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            ('scaler', StandardScaler()),
+            # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 C=1.0,
@@ -205,10 +204,9 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=SCORING,
+        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
     )
-    
 
     train_time = time.time() - start_time
 
@@ -303,13 +301,13 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        class_weights = {
-            0: 1.0,   # NoObject
-            1: 5.0,   # Ball
-            2: 3.0,   # Bat
-            3: 3.0,   # Stump
-            4: 1.0    # Other No Objects 
-        }
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 5.0,   # Ball
+        #     2: 3.0,   # Bat
+        #     3: 3.0,   # Stump
+        #     4: 1.0    # Other No Objects 
+        # }
 
         pipeline = Pipeline([
             # ('scaler', StandardScaler()),
@@ -319,7 +317,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
                 max_depth=20,
                 min_samples_split=10,
                 min_samples_leaf=5,
-                class_weight=class_weights,
+                class_weight='balanced',
                 random_state=RANDOM_STATE,
                 n_jobs=-1
             ))
@@ -346,7 +344,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=SCORING,
+        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
     )
 
@@ -435,13 +433,13 @@ def train_svm(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
-        class_weights = {
-            0: 1.0,   # NoObject (majority)
-            1: 8.0,   # Ball (rarest)
-            2: 5.0,   # Bat
-            3: 5.0,   # Stump
-            4: 1.0    # Other No Objects 
-        }
+        # class_weights = {
+        #     0: 1.0,   # NoObject (majority)
+        #     1: 8.0,   # Ball (rarest)
+        #     2: 5.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.0    # Other No Objects 
+        # }
         best_pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -449,7 +447,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
                 C=1.0,
                 kernel='rbf',
                 gamma='scale',
-                class_weight=class_weights,
+                class_weight='balanced',
                 random_state=RANDOM_STATE,
                 max_iter=5000
             ))])
@@ -460,7 +458,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=SCORING,
+        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
     )
 
@@ -561,7 +559,7 @@ def train_knn(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=SCORING,
+        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
     )
 
@@ -1129,25 +1127,25 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         #     tree_method='hist',
         #     n_jobs=-1
         # )
-        base_wts = compute_base_class_weights(y)
-        print(base_wts)
-        clf_params = {
-            'objective':'multi:softprob',
-            'num_class':4,
-            'n_estimators':800,
-            'max_depth':3,
-            'learning_rate':0.02,
-            'subsample':0.7,
-            'colsample_bytree':0.7,
-            'gamma':4,
-            'min_child_weight':10,
-            'max_delta_step':2,
-            'eval_metric':'mlogloss',
-            'tree_method':'hist',
-            'use_label_encoder':False,
-            'n_jobs':-1,
-            'random_state':42
-        }
+        # base_wts = compute_base_class_weights(y)
+        # print(base_wts)
+        # clf_params = {
+        #     'objective':'multi:softprob',
+        #     'num_class':4,
+        #     'n_estimators':800,
+        #     'max_depth':3,
+        #     'learning_rate':0.02,
+        #     'subsample':0.7,
+        #     'colsample_bytree':0.7,
+        #     'gamma':4,
+        #     'min_child_weight':10,
+        #     'max_delta_step':2,
+        #     'eval_metric':'mlogloss',
+        #     'tree_method':'hist',
+        #     'use_label_encoder':False,
+        #     'n_jobs':-1,
+        #     'random_state':42
+        # }
 
         # create small candidate list (coarse)
         # candidates = [
@@ -1182,37 +1180,69 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         # sample_weights = sample_weights_from_class_weights(y, final_wts)
         # print("Final class weights:", final_class_weights)
 
+        # model = xgb.XGBClassifier(
+        #     objective='multi:softprob',
+        #     num_class=4,
+        #     n_estimators=800,
+        #     max_depth=3,
+        #     learning_rate=0.02,
+        #     subsample=0.7,
+        #     colsample_bytree=0.7,
+        #     gamma=4,
+        #     min_child_weight=10,
+        #     max_delta_step=2,
+        #     eval_metric='mlogloss',
+        #     tree_method='hist',
+        #     use_label_encoder=False,
+        #     n_jobs=-1,
+        #     random_state=RANDOM_STATE
+        # )
+        # model = xgb.XGBClassifier(
+        #         n_estimators=200,
+        #         max_depth=5,
+        #         learning_rate=0.1,
+        #         subsample=0.8,
+        #         colsample_bytree=0.8,
+        #         objective='multi:softprob',
+        #         num_class=len(classes),
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1,
+        #         tree_method='hist',
+        #         eval_metric='aucpr'
+        #     )
         model = xgb.XGBClassifier(
-            objective='multi:softprob',
-            num_class=4,
-            n_estimators=800,
-            max_depth=3,
-            learning_rate=0.02,
-            subsample=0.7,
-            colsample_bytree=0.7,
-            gamma=4,
-            min_child_weight=10,
-            max_delta_step=2,
-            eval_metric='mlogloss',
-            tree_method='hist',
-            use_label_encoder=False,
-            n_jobs=-1,
-            random_state=RANDOM_STATE
-        )
+                n_estimators=200,
+                max_depth=5,
+                learning_rate=0.1,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                # objective='multi:softprob',
+                num_class=len(classes),
+                random_state=RANDOM_STATE,
+                n_jobs=-1,
+                # tree_method='hist',
+                eval_metric='aucpr'
+            )
         pipeline = Pipeline([
             # ("mi_select", MutualInfoSelector(keep_frac=0.6)),  # <- MI filter inside pipeline
             ("classifier", model)
         ])
-        # model.fit(X_f.values, y, sample_weight=sample_weights)
-
-
         # pipeline = Pipeline([
-        #     ('classifier', model)
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=200,
+        #         max_depth=5,
+        #         learning_rate=0.1,
+        #         subsample=0.8,
+        #         colsample_bytree=0.8,
+        #         # objective='multi:softmax',
+        #         num_class=len(classes),
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1,
+        #         eval_metric='aucpr'
+        #     ))
         # ])
 
-
-
-        # pipeline.fit(X, y, classifier__sample_weight=sample_weights)
         pipeline.fit(X, y)
 
         # # 3.2 Get importances
@@ -1293,16 +1323,13 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
         # calibrated_model.fit(X_val, y_val)
         # pipeline.fit(X, y)
         best_pipeline = pipeline
-        # best_pipeline = model
         
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=SCORING,
-        # fit_params={"classifier__sample_weight": sample_weights},
-        # return_estimator=True,
+        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
         n_jobs=-1
     )
     # cv_results_full = cross_validate(
