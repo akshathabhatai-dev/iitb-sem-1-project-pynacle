@@ -3,6 +3,9 @@ Cricket Object Detection - Main Pipeline
 This script orchestrates the complete workflow from feature extraction to prediction.
 """
 
+from collections import Counter
+import re
+from turtle import st
 import numpy as np
 import pandas as pd
 import cv2
@@ -20,12 +23,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
 from grid_utils import divide_into_grid, validate_image_size, resize_image
-from feature_extractor import extract_features_from_cell, get_all_feature_names, extract_hog_per_cell
+from feature_extractor import extract_features_from_cell, get_all_feature_names, compute_hog_per_cell, extract_na_aware_hog_for_grid_features
+# from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features
 from train import train_random_forest, save_model
 from train_compare_models import compare_models, select_best_model, save_comparison_results
 from evaluate import evaluate_model, plot_confusion_matrix, save_metrics_to_file
 from predict import predict_on_images, save_predictions_to_csv, visualize_predictions
-from undersample import apply_undersampling, get_undersampling_report, oversample_class_1
+from undersample import apply_undersampling, get_undersampling_report, oversample_class_1, apply_oversampling
+from augmentation import filter_cells_for_augmentation, generate_augmented_cells, generate_random_image_name
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="PIL")
@@ -54,7 +59,7 @@ def load_labels_from_csv(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True, test_data: bool = False):
+def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True, test_data: bool = False, train_data: bool = False):
     """
     Extract features and labels from images.
 
@@ -85,7 +90,10 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             cell_labels = [int(row[f'c{i:02d}']) for i in range(1, 65)]
             labels_dict[img_name] = cell_labels
     iterator = tqdm(images, desc="Extracting features") if verbose else images
-
+    all_bat_image_cells = []
+    all_ball_image_cells = []
+    all_stump_image_cells = []
+    all_ball_image_cell_ds = []
     for img_name, img in iterator:
         # Check if labels exist for this image
         if img_name not in labels_dict:
@@ -94,9 +102,27 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             continue
 
         # Divide into grid
-        cells = divide_into_grid(img, grid_size=(8, 8))
+        # cell_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # hog_na_list = extract_hog_per_cell(cells)
+        # gray_cells = divide_into_grid(cell_gray, grid_size=(8, 8))
+        cells = divide_into_grid(img, grid_size=(8, 8))
+        if train_data:
+            ball_cells, ball_idx, _ = filter_cells_for_augmentation(cells, labels_dict[img_name], target_class=1)
+            bat_cells, bat_idx, _ = filter_cells_for_augmentation(cells, labels_dict[img_name], target_class=2)
+            stump_cells, stump_idx, _ = filter_cells_for_augmentation(cells, labels_dict[img_name], target_class=3)
+            all_ball_image_cells.extend(ball_cells)
+            all_ball_image_cell_ds.extend(ball_idx)
+            all_bat_image_cells.extend(bat_cells)
+            all_stump_image_cells.extend(stump_cells)
+            # all_bat_image_cell_ds.extend(bat_idx)
+
+        # gray_cells = [cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY) for cell in cells]
+
+        # hog_list = compute_hog_per_cell(gray_cells, orientations=6,
+        #                                         pixels_per_cell=(16, 16),
+        #                                         cells_per_block=(1, 1))
+        # hog_na_list = extract_na_aware_hog_for_grid_features(hog_list)
+
 
         # Extract features from each cell
         for cell_idx, cell in enumerate(cells):
@@ -122,6 +148,91 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
     # num_features = len(X_list[0])   # auto-detect feature count
 
     # feature_columns = [f"f_{i}" for i in range(num_features)]   # auto column names
+    if train_data:
+        def get_groupwise_max(labels, classes=[1,2,3]):
+            counter = Counter(labels)
+            vals = [counter.get(cls, 0) for cls in classes]
+            return max(vals)
+        max_count = get_groupwise_max(y_list, classes=[0,1,2,3])
+        current_ball_count = get_groupwise_max(y_list, classes=[1])
+        current_bat_count = get_groupwise_max(y_list, classes=[2])
+        current_stump_count = get_groupwise_max(y_list, classes=[3])
+        no_of_augumentations_ball = 8
+        no_of_augumentations_bat = 4
+        no_of_augumentations_stump = 3
+        estimated_ball_count = current_ball_count * no_of_augumentations_ball
+        estimated_bat_count = current_bat_count * no_of_augumentations_bat
+        estimated_stump_count = current_stump_count * no_of_augumentations_stump
+        min_count = min(estimated_ball_count, estimated_bat_count, estimated_stump_count)
+        remaining_balls = int(min_count - current_ball_count)
+        remaining_bats = int(min_count - current_bat_count)
+        remaining_stumps = int(min_count - current_stump_count)
+        # no_of_augumentations_ball = int(np.ceil(remaining_balls/len(all_ball_image_cells)))
+        # no_of_augumentations_bat = int(np.ceil(remaining_bats/len(all_bat_image_cells)))
+        # no_of_augumentations_stump = int(np.ceil(remaining_stumps/len(all_stump_image_cells)))
+        print(f"Current counts - Ball: {current_ball_count}, Bat: {current_bat_count}, Stump: {current_stump_count}, Max: {0.5*max_count}")
+        print(f"Remaining counts - Ball: {remaining_balls}, Bat: {remaining_bats}, Stump: {remaining_stumps}, Max: {0.5*max_count}")
+        print(f"Number Of Augmentations - Ball: {no_of_augumentations_ball}, Bat: {no_of_augumentations_bat}, Stump: {no_of_augumentations_stump}")
+        print("Applying augmented oversampling for Class 1 (ball)...")
+        augmented_ball_cells = []
+
+        # ball_cells, ball_idx, _ = filter_cells_for_augmentation(cells, labels, target_class=1)
+
+        iterator = tqdm(all_ball_image_cells, desc="Suggesting augmentations") if verbose else all_ball_image_cells
+        for cell in iterator:
+            aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_ball-1, class_no=1)
+            augmented_ball_cells.extend(aug_versions)
+        
+        print(f"Total ball cells available for augmentation: {len(augmented_ball_cells)}, need to augment: {remaining_balls}")
+        iterator = tqdm(augmented_ball_cells[0:int(remaining_balls)], desc="Extracting Features for augmentations") if verbose else augmented_ball_cells[0:int(remaining_balls)]
+        # for cell_idx, cell in enumerate(augmented_ball_cells):
+        for cell_idx, cell in enumerate(iterator):
+            features = extract_features_from_cell(cell)  # without NA-HOG
+            X_list.append(features)
+            y_list.append(1)  # label is 1 for all augmented ball cells
+            image_names_list.append(generate_random_image_name())
+            cell_index_list.append(-1)  # -1 indicates augmented cell
+
+        print("Applying augmented oversampling for Class 2 (bat)...")
+        augmented_bat_cells = []
+        iterator = tqdm(all_bat_image_cells, desc="Suggesting augmentations") if verbose else all_bat_image_cells
+        for cell in iterator:
+            aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_bat-1, class_no=2)
+            augmented_bat_cells.extend(aug_versions)
+        
+        print(f"Total bat cells available for augmentation: {len(augmented_bat_cells)}, need to augment: {remaining_bats}")
+        iterator = tqdm(augmented_bat_cells[0: int(remaining_bats)], desc="Extracting Features for augmentations") if verbose else augmented_bat_cells[0:int(remaining_bats)]
+        # for cell_idx, cell in enumerate(augmented_ball_cells):
+        for cell_idx, cell in enumerate(iterator):
+            features = extract_features_from_cell(cell)  # without NA-HOG
+            X_list.append(features)
+            y_list.append(2)  # label is 2 for all augmented bat cells
+            image_names_list.append(generate_random_image_name())
+            cell_index_list.append(-1)  # -1 indicates augmented cell
+        
+        print("Applying augmented oversampling for Class 3 (stump)...")
+        augmented_stump_cells = []
+        # print(f"Total stump cells available for augmentation: {len(all_stump_image_cells)}, need to augment: {remaining_stumps}")
+        iterator = tqdm(all_stump_image_cells, desc="Suggesting augmentations") if verbose else all_stump_image_cells[0:remaining_stumps]
+        for cell in iterator:
+            aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_stump-1, class_no=3)
+            augmented_stump_cells.extend(aug_versions)
+        
+        print(f"Total stump cells available for augmentation: {len(augmented_stump_cells)}, need to augment: {remaining_stumps}")
+        iterator = tqdm(augmented_stump_cells[0:int(remaining_stumps)], desc="Extracting Features for augmentations") if verbose else augmented_stump_cells[0:int(remaining_stumps)]
+        # for cell_idx, cell in enumerate(augmented_ball_cells):
+        for cell_idx, cell in enumerate(iterator):
+            features = extract_features_from_cell(cell)  # without NA-HOG
+            X_list.append(features)
+            y_list.append(3)  # label is 3 for all augmented stump cells
+            image_names_list.append(generate_random_image_name())
+            cell_index_list.append(-1)  # -1 indicates augmented cell
+    # label = labels_dict[img_name][cell_idx]
+
+    # X_list.append(features)
+    # y_list.append(label)
+    # image_names_list.append(img_name)
+    # cell_index_list.append(cell_idx)
 
     feature_columns = get_all_feature_names()
 
@@ -235,10 +346,13 @@ def main():
         print(f"Found {len(train_images)} training images")
 
         # Extract features
-        X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df)
+        X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df, train_data=True)
 
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
+
+        # Save features
+        train_df.to_csv(output_dir / 'train_features.csv', index=False)
 
         # Apply undersampling if requested
         if args.undersample:
@@ -265,24 +379,29 @@ def main():
             print(f"\nUndersampling report saved to {output_dir / 'undersampling_report.csv'}")
             print("-"*70)
 
-            X_train, y_train, train_df = oversample_class_1(
-                X_train, y_train, train_df,
-                target_count_ratio=0.95,
-                random_seed=42,
-                verbose=True
-            )
+            # X_train, y_train, train_df = oversample_class_1(
+            #     X_train, y_train, train_df,
+            #     target_count_ratio=0.95,
+            #     random_seed=42,
+            #     verbose=True
+            # )
 
-            print(f"\nAfter oversampling: X_train shape = {X_train.shape}")
-            print(f"After oversampling: y_train shape = {y_train.shape}")
+            # X_train, y_train, _ = apply_oversampling(
+            #     X_train, y_train, train_df,
+            #     target_count_ratio=0.95,
+            #     random_seed=42,
+            #     verbose=True
+            # )
 
-            # Generate and save oversampling report
-            report = get_undersampling_report(y_train_original, y_train)
-            report.to_csv(output_dir / 'oversampling_report.csv', index=False)
-            print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
-            print("-"*70)
+            # print(f"\nAfter oversampling: X_train shape = {X_train.shape}")
+            # print(f"After oversampling: y_train shape = {y_train.shape}")
 
-        # Save features
-        train_df.to_csv(output_dir / 'train_features.csv', index=False)
+            # # Generate and save oversampling report
+            # report = get_undersampling_report(y_train_original, y_train)
+            # report.to_csv(output_dir / 'oversampling_report.csv', index=False)
+            # print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
+            # print("-"*70)
+
         np.save(output_dir / 'X_train.npy', X_train)
         np.save(output_dir / 'y_train.npy', y_train)
         print(f"Saved training features to {output_dir}")
@@ -412,7 +531,7 @@ def main():
                             save_path=output_dir / 'confusion_matrix.png')
 
     # PREDICT MODE
-    if args.mode in ['full', 'predict']:
+    if False and args.mode in ['full', 'predict']:
         print("\n[4/4] GENERATING PREDICTIONS")
         print("-"*70)
 
@@ -435,10 +554,11 @@ def main():
             print("\n[VISUALIZATION] GENERATING COLOR-CODED GRIDS")
             print("-"*70)
 
-            train_count, test_count = visualize_predictions(
+            train_count, test_count, validate_count = visualize_predictions(
                 predictions=predictions,
                 train_image_dir=args.train_images,
                 test_image_dir=args.test_images,
+                validate_image_dir=args.validate_images,
                 output_dir=args.output_dir,
                 verbose=True
             )
@@ -449,7 +569,8 @@ def main():
                     print(f"  Train: {train_count} images -> {output_dir}/train/visualizations/")
                 if test_count > 0:
                     print(f"  Test: {test_count} images -> {output_dir}/test/visualizations/")
-
+                if validate_count > 0:
+                    print(f"  Validate: {validate_count} images -> {output_dir}/validate/visualizations/")
     print("\n" + "="*70)
     print("PIPELINE COMPLETE!")
     print("="*70)

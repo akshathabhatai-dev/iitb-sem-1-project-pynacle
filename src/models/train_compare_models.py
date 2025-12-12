@@ -21,8 +21,11 @@ import time
 from pathlib import Path
 from typing import Dict, Tuple, Any
 import warnings
+
+from sklearn.calibration import CalibratedClassifierCV
 warnings.filterwarnings('ignore')
 
+from sklearn import tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
@@ -30,17 +33,19 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, cross_validate, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, cross_validate, StratifiedKFold, cross_val_score
 from sklearn.metrics import (
     accuracy_score, f1_score, precision_score, recall_score,
     classification_report, confusion_matrix
 )
+# from sklearn.model_selection import cross_val_score
 from sklearn.decomposition import PCA
 from sklearn.utils.class_weight import compute_class_weight
 import xgboost as xgb
 
 import sys
 import os
+from mutual_info_selector import MutualInfoSelector
 
 # Add parent directories to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -49,6 +54,63 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'features'))
 # Import configuration constants
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config import PCA_VARIANCE_THRESHOLD, RANDOM_STATE, CV_FOLDS, CV_SCORING_METRIC
+
+from sklearn.metrics import make_scorer, classification_report
+import numpy as np
+import collections
+
+# CLASS_NAMES = ["NoObject", "Ball", "Bat", "Stump", "OtherNoObjects"]
+CLASS_NAMES = ["NoObject", "Ball", "Bat", "Stump"]
+BALL_BAT_STUMP = ["Ball", "Bat", "Stump", "NoObject"]
+# BALL_BAT_STUMP = ["NoObject", "Ball", "Bat", "Stump", "OtherNoObjects"]
+BALL_BAT_STUMP_IDS = [0, 1, 2, 3] # Corresponding IDs for Ball, Bat, Stump
+
+def f1_3class(y_true, y_pred):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=CLASS_NAMES,
+        output_dict=True,
+        zero_division=0
+    )
+    return np.mean([report[c]["f1-score"] for c in BALL_BAT_STUMP])
+
+def recall_3class(y_true, y_pred):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=CLASS_NAMES,
+        output_dict=True,
+        zero_division=0
+    )
+    return np.mean([report[c]["recall"] for c in BALL_BAT_STUMP])
+
+def precision_3class(y_true, y_pred):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=CLASS_NAMES,
+        output_dict=True,
+        zero_division=0
+    )
+    return np.mean([report[c]["precision"] for c in BALL_BAT_STUMP])
+
+def accuracy_3class_from_report(y_true, y_pred):
+    """
+    Computes accuracy ONLY for Ball, Bat, Stump using classification_report data.
+    This ignores all NoObject samples.
+    """
+    mask = np.isin(y_true, BALL_BAT_STUMP_IDS)  # keep only Ball, Bat, Stump
+    if mask.sum() == 0:
+        return 0.0
+    return (y_true[mask] == y_pred[mask]).mean()
+
+SCORING = {
+    "f1_macro": make_scorer(f1_3class),
+    "recall_macro": make_scorer(recall_3class),
+    "precision_macro": make_scorer(precision_3class),
+    "accuracy": make_scorer(accuracy_3class_from_report)
+}
 
 
 def train_logistic_regression(X: np.ndarray, y: np.ndarray,
@@ -115,7 +177,7 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
     else:
         # Default parameters
         pipeline = Pipeline([
-            # ('scaler', StandardScaler()),
+            ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
             ('classifier', LogisticRegression(
                 C=1.0,
@@ -134,12 +196,19 @@ def train_logistic_regression(X: np.ndarray, y: np.ndarray,
 
     # Cross-validation evaluation
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
+    # cv_results = cross_validate(
+    #     best_pipeline, X, y,
+    #     cv=cv,
+    #     scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+    #     n_jobs=-1
+    # )
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
+    
 
     train_time = time.time() - start_time
 
@@ -234,6 +303,14 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
+        class_weights = {
+            0: 1.0,   # NoObject
+            1: 5.0,   # Ball
+            2: 3.0,   # Bat
+            3: 3.0,   # Stump
+            4: 1.0    # Other No Objects 
+        }
+
         pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -242,11 +319,24 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
                 max_depth=20,
                 min_samples_split=10,
                 min_samples_leaf=5,
-                class_weight='balanced',
+                class_weight=class_weights,
                 random_state=RANDOM_STATE,
                 n_jobs=-1
             ))
         ])
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
+        #     ('classifier', RandomForestClassifier(
+        #         n_estimators=200,
+        #         max_depth=20,
+        #         min_samples_split=10,
+        #         min_samples_leaf=5,
+        #         class_weight='balanced',
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1
+        #     ))
+        # ])
 
         pipeline.fit(X, y)
         best_pipeline = pipeline
@@ -256,7 +346,7 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 
@@ -345,6 +435,13 @@ def train_svm(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
+        class_weights = {
+            0: 1.0,   # NoObject (majority)
+            1: 8.0,   # Ball (rarest)
+            2: 5.0,   # Bat
+            3: 5.0,   # Stump
+            4: 1.0    # Other No Objects 
+        }
         best_pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -352,7 +449,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
                 C=1.0,
                 kernel='rbf',
                 gamma='scale',
-                class_weight='balanced',
+                class_weight=class_weights,
                 random_state=RANDOM_STATE,
                 max_iter=5000
             ))])
@@ -363,7 +460,7 @@ def train_svm(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 
@@ -464,7 +561,7 @@ def train_knn(X: np.ndarray, y: np.ndarray,
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
         n_jobs=-1
     )
 
@@ -493,6 +590,111 @@ def train_knn(X: np.ndarray, y: np.ndarray,
 
     return best_pipeline, metrics
 
+def compute_base_class_weights(y_train, target_classes=None, normalize_mean_one=True):
+    """
+    Inverse-frequency weights per class.
+    Returns dict: {class_label: weight}
+    """
+    counts = collections.Counter(y_train)
+    if target_classes is None:
+        target_classes = sorted(counts.keys())
+    total = sum(counts[c] for c in target_classes)
+    # inverse freq
+    weights = {c: (total / counts[c]) for c in target_classes}
+    if normalize_mean_one:
+        mean_w = np.mean(list(weights.values()))
+        weights = {c: float(weights[c] / mean_w) for c in weights}
+    return weights
+
+def sample_weights_from_class_weights(y, class_weights):
+    # y can be numpy array or list
+    y = np.asarray(y)
+    return np.array([class_weights[int(cl)] for cl in y], dtype=float)
+
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import f1_score, recall_score, precision_score
+# import xgboost as xgb
+import numpy as np
+
+def evaluate_weight_candidates(X, y, classifier_params, class_weights_base,
+                               candidate_multipliers_list,
+                               cv_splits=4, random_state=42,
+                               score_metric='macro_f1_no0'):
+    """
+    candidate_multipliers_list: list of dicts {class_label: multiplier}
+    score_metric: 'macro_f1_no0' or 'mean_recall_no0' or 'macro_f1'
+    returns list of (multipliers_dict, mean_score, std_score)
+    """
+    skf = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=random_state)
+    results = []
+    classes_all = sorted(class_weights_base.keys())
+
+    for multipliers in candidate_multipliers_list:
+        scores = []
+        for train_idx, val_idx in skf.split(X, y):
+            X_tr, X_val = X[train_idx], X[val_idx]
+            y_tr, y_val = y[train_idx], y[val_idx]
+
+            # build class weights for this candidate
+            class_weights = {c: class_weights_base[c] * multipliers.get(c, 1.0) for c in classes_all}
+            sw_tr = sample_weights_from_class_weights(y_tr, class_weights)
+
+            # instantiate classifier
+            clf = xgb.XGBClassifier(**classifier_params)
+
+            # fit with sample_weight
+            clf.fit(X_tr, y_tr, sample_weight=sw_tr, verbose=False)
+
+            # predict on val
+            y_pred = clf.predict(X_val)
+
+            # metric focusing only on classes 1,2,3 (exclude NoObject)
+            focus_labels = [1,2,3]
+            if score_metric == 'macro_f1_no0':
+                s = f1_score(y_val, y_pred, labels=focus_labels, average='macro', zero_division=0)
+            elif score_metric == 'mean_recall_no0':
+                s = recall_score(y_val, y_pred, labels=focus_labels, average='macro', zero_division=0)
+            else:
+                s = f1_score(y_val, y_pred, average='macro', zero_division=0)
+
+            scores.append(s)
+
+        results.append((multipliers, np.mean(scores), np.std(scores)))
+
+    # sort by mean desc
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results
+
+from sklearn.metrics import f1_score
+
+def tune_thresholds(clf, X_val, y_val, labels_to_tune=[1,2,3]):
+    # get probabilities
+    probs = clf.predict_proba(X_val)  # shape (n, n_classes)
+    n_classes = probs.shape[1]
+
+    # default thresholds
+    thr = {i: 0.5 for i in range(n_classes)}
+
+    best_thr = thr.copy()
+    best_f1 = f1_score(y_val, clf.predict(X_val), average='macro', zero_division=0)
+
+    # grid search per class (simple)
+    for c in labels_to_tune:
+        best_local = (0.5, -1.0)
+        for t in np.linspace(0.1, 0.9, 17):
+            # apply thresholds: pick class with highest (prob - (1-threshold))?? Simpler: choose class c if prob_c >= t; else argmax of others
+            preds = []
+            for p in probs:
+                # if class c prob >= t choose c else argmax of probs
+                if p[c] >= t:
+                    preds.append(c)
+                else:
+                    preds.append(int(np.argmax(p)))
+            val_f1 = f1_score(y_val, preds, average='macro', zero_division=0)
+            if val_f1 > best_local[1]:
+                best_local = (t, val_f1)
+        best_thr[c] = best_local[0]
+    return best_thr
 
 def train_xgboost(X: np.ndarray, y: np.ndarray,
                  tune_hyperparameters: bool = True,
@@ -562,34 +764,565 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
 
     else:
         # Default parameters
+        # best_model = xgb.XGBClassifier(
+        #     n_estimators=200,
+        #     max_depth=5,
+        #     learning_rate=0.1,
+        #     subsample=0.8,
+        #     colsample_bytree=0.8,
+        #     objective='multi:softmax',
+        #     num_class=len(classes),
+        #     random_state=42,
+        #     n_jobs=-1,
+        #     eval_metric='mlogloss'
+        # )
+
+        # best_model = xgb.XGBClassifier(
+        #     n_estimators=200,
+        #     max_depth=5,
+        #     learning_rate=0.1,
+        #     subsample=0.8,
+        #     colsample_bytree=0.8,
+        #     # objective='multi:softmax',
+        #     num_class=len(classes),
+        #     random_state=42,
+        #     n_jobs=-1,
+        #     eval_metric='aucpr'
+        # )
+        # best_model.fit(X, y, sample_weight=sample_weights)
+
+        # pipeline = Pipeline([
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=200,
+        #         max_depth=5,
+        #         learning_rate=0.1,
+        #         subsample=0.8,
+        #         colsample_bytree=0.8,
+        #         # objective='multi:softmax',
+        #         num_class=len(classes),
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1,
+        #         eval_metric='aucpr'
+        #     ))
+        # ])
+
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 8.0,   # Ball
+        #     2: 5.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.0    # Other No Objects 
+        # }
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 9.5,   # Ball
+        #     2: 7.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.8    # Other No Objects 
+        # }
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 9.5,   # Ball
+        #     2: 7.0,   # Bat
+        #     3: 4,   # Stump
+        #     4: 1.2    # Other No Objects 
+        # }
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 12.0,   # Ball
+        #     2: 10.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.2    # Other No Objects 
+        # }
+
+        # class_weights = {
+        #     0: 1.0,   # NoObject (baseline)
+        #     4: 1.1,   # Other NoObjects (small upweight)
+        #     1: 3.5,   # Ball  (strong upweight — rare & important)
+        #     2: 2.0,   # Bat   (moderate)
+        #     3: 1.5    # Stump (mild)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 2.5,   # Ball
+        #     2: 1.5,   # Bat
+        #     3: 1.2,   # Stump
+        #     4: 1.0
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.2,
+        #     1: 4.0,   # Ball (moderate boost)
+        #     2: 2.5,   # Bat
+        #     3: 1.8    # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.0,
+        #     1: 3.2,   # Ball (reduced from 4 → increase precision)
+        #     2: 2.2,   # Bat (reduced from 2.5)
+        #     3: 2.0    # Stump (increase slightly to boost recall/precision balance)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,     # No Object
+        #     4: 1.0,     # Other No Object
+        #     1: 2.8,     # Ball (↓ from 3.2 → reduce false positives)
+        #     2: 1.8,     # Bat  (↓ from 2.2)
+        #     3: 1.6      # Stump (↓ slightly from 2.0)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.0,
+        #     1: 2.8,   # Ball (unchanged)
+        #     2: 2.1,   # Bat (↑ from 1.8)
+        #     3: 1.5    # Stump (↓ from 1.6)
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     4: 1.0,
+        #     1: 2.6,   # Ball (slightly down)
+        #     2: 2.4,   # Bat (UP — Bat needs stronger boosting)
+        #     3: 1.4    # Stump (down — overpredicting Bat)
+        # }
+
+        # class_weights = {
+        #     0: 0.9,    # NoObject → reduce dominance
+        #     # 4: 0.9,    # Other NoObject → match class 0
+        #     1: 2.6,    # Ball → keep stable
+        #     2: 2.7,    # Bat → increase to improve precision
+        #     3: 1.3     # Stump → reduce slightly to reduce confusion with Bat
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 3.5,
+        #     2: 2.2,
+        #     3: 1.8,
+        #     # 4: 1.0
+        # }
+
+        # class_weights = {
+        #     0: 0.8,   # No Object
+        #     1: 2.0,   # Ball
+        #     2: 1.1,   # Bat
+        #     3: 0.8    # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 2.55,
+        #     2: 1.36,
+        #     3: 1.0
+        # }
+
+        # class_weights = {
+        #     0: 1.0,     # No Object
+        #     1: 1.8,     # Ball
+        #     2: 1.5,     # Bat
+        #     3: 1.2      # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,     # No Object
+        #     1: 1.8,     # Ball
+        #     2: 1.5,     # Bat
+        #     3: 1.2      # Stump
+        # }
+
+        # class_weights = {
+        #     0: 1.0,
+        #     1: 5.0,
+        #     2: 3.0,
+        #     3: 3.0
+        # }
+        # class_weights = {0:0.5, 1:3.0, 2:2.0, 3:2.5}
+        # class_weights = {
+        #     0: 0.25,
+        #     1: 11.0,
+        #     2: 6.0,
+        #     3: 4.3
+        # }
+
+        # print("Using class weights:", class_weights)
+        # sample_weights = np.array([class_weights[int(label)] for label in y])
+        # def compute_sample_weights(y, class_weights, normalize_mean=True):
+        #     # y : numpy array of integer labels
+        #     w = np.array([class_weights[int(c)] for c in y], dtype=float)
+        #     if normalize_mean:
+        #         w = w / w.mean()         # keeps average loss scale stable (recommended)
+        #     return w
+        # sample_weights = compute_sample_weights(y, class_weights, normalize_mean=True)
+        # sample_weights = compute_sample_weights(y, class_weights)
+        # pipeline = Pipeline([
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=600,
+        #         max_depth=4,
+        #         learning_rate=0.03,
+        #         min_child_weight=6,
+        #         gamma=1.0,
+        #         subsample=0.8,
+        #         colsample_bytree=0.8,
+        #         reg_lambda=1.0,
+        #         reg_alpha=0.2,
+        #         use_label_encoder=False,
+        #         eval_metric="mlogloss",
+        #         objective='multi:softmax',
+        #         num_class=len(classes),
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1
+        #     ))
+        # ])
+        # class_counts = np.bincount(y)
+        # total = len(y)
+        # weights = total / (len(class_counts) * class_counts)
+        # sample_weights = np.array([weights[y] for y in y])         
+
+        # print(weights)
+
+        # pipeline = Pipeline([
+        #     ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=600,
+        #         max_depth=8,
+        #         min_child_weight = 3,
+        #         gamma = 1.0,
+        #         lambda_ = 0.8,
+        #         alpha = 0.3,
+        #         learning_rate=0.03,
+        #         subsample=0.9,
+        #         colsample_bytree=0.9,
+        #         objective='multi:softprob',
+        #         tree_method='hist',
+        #         num_class=len(classes),
+        #         scale_pos_weight=None, # using sample_weight instead
+        #         random_state=RANDOM_STATE,
+        #         n_jobs=-1,
+        #         eval_metric='mlogloss',
+        #         # class_weights=class_weights
+        #     ))
+        # ])
+        # unique, counts = np.unique(y, return_counts=True)
+        # class_counts = dict(zip(unique, counts))
+        # total = len(y)
+        # n_classes = len(unique)
+
+        # # inverse-frequency normalized weights
+        # class_weight = {int(c): total / (n_classes * count) for c, count in class_counts.items()}
+
+        # # Example: class_weight might be {0:0.28, 1:12.57, ...}
+        # print("Per-class weight (normalized):", class_weight)
+
+        # # create per-sample weights array to pass to fit()
+        # sample_weights = np.array([class_weight[int(y)] for y in y], dtype=float)
+
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=400,
+        #         max_depth=7,
+        #         learning_rate=0.03,
+        #         min_child_weight=3,
+        #         gamma=0.5,
+        #         subsample=0.85,
+        #         colsample_bytree=0.85,
+        #         objective="multi:softprob",
+        #         num_class=len(classes),
+        #         tree_method="hist",
+        #         random_state=42,
+        #         n_jobs=-1,
+        #         eval_metric="mlogloss",
+        #     ))
+        # ])
+
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=500,
+        #         max_depth=7,
+        #         learning_rate=0.05,
+        #         min_child_weight=3,
+        #         gamma=2.5,
+        #         subsample=0.85,
+        #         colsample_bytree=0.85,
+        #         objective="multi:softprob",
+        #         num_class=len(classes),
+        #         tree_method="hist",
+        #         random_state=42,
+        #         n_jobs=-1,
+        #         eval_metric="mlogloss",
+        #     ))
+        # ])
+
+        # pipeline = Pipeline([
+        #     # ('scaler', StandardScaler()),
+        #     ('classifier', xgb.XGBClassifier(
+        #         n_estimators=800,
+        #         max_depth=7,
+        #         learning_rate=0.05,
+        #         min_child_weight=10,
+        #         gamma=4,
+        #         max_delta_step=2, 
+        #         subsample=0.7,
+        #         colsample_bytree=0.7,
+        #         eta=0.02,
+        #         num_parallel_tree=1,
+        #         objective="multi:softprob",
+        #         num_class=len(classes),
+        #         tree_method="hist",
+        #         random_state=42,
+        #         n_jobs=-1,
+        #         eval_metric="mlogloss",
+        #     ))
+        # ])
+        # class_weights = {0: 0.25, 1: 11.0, 2: 6.0, 3: 4.3}
+        # sample_weights = np.array([class_weights[y_wt] for y_wt in y])
+        # from sklearn.feature_selection import VarianceThreshold
+
+        # # X: pandas.DataFrame (preferred)
+        # if not isinstance(X, pd.DataFrame):
+        #     X = pd.DataFrame(X)
+
+        # # 1.1 remove near-constant features
+        # vt = VarianceThreshold(threshold=1e-4)   # tune threshold if needed
+        # X_v = pd.DataFrame(vt.fit_transform(X), columns=X.columns[vt.get_support()])
+
+        # # 1.2 remove highly correlated features (keep one of each correlated block)
+        # corr = X_v.corr().abs()
+        # upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+        # to_drop = [c for c in upper.columns if any(upper[c] > 0.95)]
+        # X_v = X_v.drop(columns=to_drop)
+        # print("After variance+corr filter:", X_v.shape)
+
+        # from sklearn.feature_selection import mutual_info_classif
+
+        # mi = mutual_info_classif(X_v.values, y, discrete_features=False, random_state=42)
+        # mi_series = pd.Series(mi, index=X_v.columns).sort_values(ascending=False)
+        # mi_series.head(20)
+
+        # keep top k by MI or fraction
+        # keep_frac = 0.6   # keep top 60% by MI
+        # k = max(50, int(len(mi_series) * keep_frac))
+        # keep_cols = mi_series.index[:k].tolist()
+        # X_f = X_v[keep_cols]
+        # print("After MI filter:", X_f.shape)
+
+        # model = xgb.XGBClassifier(
+        #     objective='multi:softprob',
+        #     num_class=4,
+        #     n_estimators=800,
+        #     max_depth=3,
+        #     learning_rate=0.02,
+        #     subsample=0.7,
+        #     colsample_bytree=0.7,
+        #     gamma=4,
+        #     min_child_weight=10,
+        #     max_delta_step=2,
+        #     eval_metric='mlogloss',
+        #     tree_method='hist',
+        #     n_jobs=-1
+        # )
+        base_wts = compute_base_class_weights(y)
+        print(base_wts)
+        clf_params = {
+            'objective':'multi:softprob',
+            'num_class':4,
+            'n_estimators':800,
+            'max_depth':3,
+            'learning_rate':0.02,
+            'subsample':0.7,
+            'colsample_bytree':0.7,
+            'gamma':4,
+            'min_child_weight':10,
+            'max_delta_step':2,
+            'eval_metric':'mlogloss',
+            'tree_method':'hist',
+            'use_label_encoder':False,
+            'n_jobs':-1,
+            'random_state':42
+        }
+
+        # create small candidate list (coarse)
+        # candidates = [
+        #     {0:1.0, 1:1.5, 2:1.3, 3:1.1},
+        #     {0:1.0, 1:2.0, 2:1.5, 3:1.2},
+        #     {0:1.0, 1:3.0, 2:1.8, 3:1.2},
+        #     {0:1.0, 1:2.5, 2:1.6, 3:1.3},
+        # ]
+
+        # results = evaluate_weight_candidates(
+        #     X, y,
+        #     classifier_params=clf_params,
+        #     class_weights_base=base_wts,
+        #     candidate_multipliers_list=candidates,
+        #     cv_splits=4,
+        #     score_metric='macro_f1_no0'
+        # )
+
+        # print("Candidates sorted (best first):")
+        # for mult, mean_score, std in results:
+        #     print(mult, mean_score, std)
+
+        # choose top multipliers -> final_wts map then fit on full train + early stopping:
+        # chosen_mult = results[0][0]   # or whichever you like
+        # chosen_mult = {0:1.0, 1:1.5, 2:1.3, 3:1.1}
+        # final_class_weights = {c: base_wts[c] * chosen_mult.get(c,1.0) for c in base_wts}
+        # sample_weights = sample_weights_from_class_weights(y, final_class_weights)
+        # You can then override/multiply certain classes manually if you want stronger boost:
+        # e.g. increase Ball and Bat a bit:
+        # class_multipliers = {0:1.0, 1:2.0, 2:1.5, 3:1.2}
+        # final_wts = {c: base_wts[c] * class_multipliers.get(c, 1.0) for c in base_wts}
+        # sample_weights = sample_weights_from_class_weights(y, final_wts)
+        # print("Final class weights:", final_class_weights)
+
+        model = xgb.XGBClassifier(
+            objective='multi:softprob',
+            num_class=4,
+            n_estimators=800,
+            max_depth=3,
+            learning_rate=0.02,
+            subsample=0.7,
+            colsample_bytree=0.7,
+            gamma=4,
+            min_child_weight=10,
+            max_delta_step=2,
+            eval_metric='mlogloss',
+            tree_method='hist',
+            use_label_encoder=False,
+            n_jobs=-1,
+            random_state=RANDOM_STATE
+        )
         pipeline = Pipeline([
-            # ('scaler', StandardScaler()),
-            # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
-            ('classifier', xgb.XGBClassifier(
-                n_estimators=200,
-                max_depth=5,
-                learning_rate=0.1,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                objective='multi:softmax',
-                num_class=len(classes),
-                random_state=RANDOM_STATE,
-                n_jobs=-1,
-                eval_metric='mlogloss'
-            ))
+            # ("mi_select", MutualInfoSelector(keep_frac=0.6)),  # <- MI filter inside pipeline
+            ("classifier", model)
         ])
+        # model.fit(X_f.values, y, sample_weight=sample_weights)
 
-        pipeline.fit(X, y, classifier__sample_weight=sample_weights)
+
+        # pipeline = Pipeline([
+        #     ('classifier', model)
+        # ])
+
+
+
+        # pipeline.fit(X, y, classifier__sample_weight=sample_weights)
+        pipeline.fit(X, y)
+
+        # # 3.2 Get importances
+        # importances = model.get_booster().get_score(importance_type="gain")
+        # # map to DataFrame
+        # imp_df = pd.Series(importances).sort_values(ascending=False)
+        # # Note: get_score returns names like 'f0','f1' if X is array; with DataFrame columns match.
+
+        # # 3.3 Select top features automatically with threshold or top_k
+        # from sklearn.feature_selection import SelectFromModel
+
+        # # Option A: select using threshold (median importance)
+        # threshold = np.median(list(importances.values()))
+        # sfm = SelectFromModel(model, threshold=threshold, prefit=True)
+        # X_s = sfm.transform(X_f)
+        # selected_cols = X_f.columns[sfm.get_support()]
+        # print("Selected by model:", X_s.shape)
+
+        # # Option B: select top N
+        # N = 300
+        # top_k = imp_df.index[:N].tolist()
+        # # if keys are 'f0' etc, map to columns - easier to use feature_importances_ attribute
+        # fi = pd.Series(model.feature_importances_, index=X_f.columns).sort_values(ascending=False)
+        # top_k_cols = fi.index[:N].tolist()
+        # X_s = X_f[top_k_cols]
+        # print("Selected top_k:", X_s.shape)
+
+
+        # calibrated_model = CalibratedClassifierCV(
+        #     base_estimator=pipeline,
+        #     cv="prefit",          # <-- important!
+        #     method="sigmoid"
+        # )
+        # xgb_model = xgb.XGBClassifier(
+        #     n_estimators=300,
+        #     max_depth=6,
+        #     min_child_weight=5,
+        #     learning_rate=0.05,
+        #     subsample=0.8,
+        #     colsample_bytree=0.8,
+        #     objective="multi:softprob",
+        #     eval_metric="mlogloss",
+        #     n_jobs=-1,
+        # )
+
+        # pipeline = Pipeline([
+        #     ("scaler", StandardScaler()),
+        #     ("calib", CalibratedClassifierCV(
+        #         base_estimator=xgb_model,
+        #         cv=5,
+        #         method="sigmoid"
+        #     ))
+        # ])
+
+        # pipeline = Pipeline([
+        #     ("scaler", StandardScaler()),
+        #     ("calib", CalibratedClassifierCV(
+        #         estimator=xgb.XGBClassifier(
+        #             n_estimators=300,
+        #             max_depth=6,
+        #             min_child_weight=5,
+        #             gamma=2.0,
+        #             reg_lambda=1.2,
+        #             reg_alpha=0.4,
+        #             learning_rate=0.05,
+        #             subsample=0.8,
+        #             colsample_bytree=0.8,
+        #             objective="multi:softprob",
+        #             eval_metric="mlogloss",
+        #             random_state=42,
+        #             n_jobs=-1
+        #         ),
+        #         cv=5,
+        #         method="sigmoid"
+        #     ))
+        # ])
+
+        # calibrated_model.fit(X_val, y_val)
+        # pipeline.fit(X, y)
         best_pipeline = pipeline
-
+        # best_pipeline = model
+        
     # Cross-validation evaluation (without sample_weight for CV - XGBoost already trained with it)
     cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
     cv_results = cross_validate(
         best_pipeline, X, y,
         cv=cv,
-        scoring=['accuracy', 'f1_macro', 'precision_macro', 'recall_macro'],
+        scoring=SCORING,
+        # fit_params={"classifier__sample_weight": sample_weights},
+        # return_estimator=True,
         n_jobs=-1
     )
+    # cv_results_full = cross_validate(
+    #     best_pipeline, X_v, y,
+    #     cv=cv,
+    #     scoring=SCORING,
+    #     # fit_params={"classifier__sample_weight": sample_weights},
+    #     # return_estimator=True,
+    #     n_jobs=-1
+    # )
+
+    # cv_results_sel = cross_validate(
+    #     best_pipeline, X_s, y,
+    #     cv=cv,
+    #     scoring=SCORING,
+    #     # fit_params={"classifier__sample_weight": sample_weights},
+    #     # return_estimator=True,
+    #     n_jobs=-1
+    # )
+    # print("F1 macro, full:", cv_results_full['test_f1_macro'].mean(), " selected:", cv_results_sel['test_f1_macro'].mean())
 
     train_time = time.time() - start_time
 

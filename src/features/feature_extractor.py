@@ -4,13 +4,16 @@ from typing import List
 import sys
 import os
 
+from src.features import lab_color_features
+
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from rgb_features import extract_rgb_histogram_features, get_rgb_feature_names
 from rgb_hist_features import extract_rgb_hist_features, get_rgb_hist_feature_names
 from hsv_features import extract_hsv_color_features, rgb_to_hsv, get_hsv_feature_names
-from hsv_hist_features import extract_hsv_hist_color_features, get_hsv_hist_feature_names
+from hsv_hist_features import extract_hsv_hist_color_features, get_hsv_hist_color_feature_names
+from hsv_hist_mode_features import extract_hsv_hist_features, get_hsv_hist_feature_names
 from lbp_features import extract_lbp_features, get_lbp_feature_names
 from hog_features import extract_hog_features, get_hog_feature_names
 from gabor_features import extract_gabor_features, get_gabor_feature_names
@@ -19,6 +22,12 @@ from hu_moment_features import extract_hu_moment_features, get_hu_moment_feature
 from sift_features import extract_sift_features, get_sift_feature_names
 from orb_features import extract_orb_features, get_orb_feature_names
 from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features, get_na_aware_hog_feature_names
+
+from circularity_features import extract_circularity_features, get_circularity_feature_names
+from edge_density_features import extract_edge_density_features, get_edge_density_feature_names
+from lab_color_features import extract_lab_color_features, get_lab_color_feature_names
+from smoothness_features import extract_smoothness_features, get_smoothness_feature_names
+from polygon_features import extract_polygon_features, get_polygon_feature_names
 
 # PHASE 1 FEATURES - Enhanced detection for ball/bat/stump
 from enhanced_color_features import extract_enhanced_color_features, get_enhanced_color_feature_names
@@ -48,6 +57,8 @@ from spatial_context_features import extract_spatial_context_features, get_spati
 # PHASE 4C FEATURES - Advanced Texture (Laws, Fourier)
 from laws_texture_features import extract_laws_texture_features, get_laws_texture_feature_names
 from fourier_texture_features import extract_fourier_texture_features, get_fourier_texture_feature_names
+from bg_removal import apply_mask, best_cricket_mask
+from shape_structure_features import extract_shape_features, get_shape_feature_names
 
 
 def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.ndarray:
@@ -99,34 +110,45 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     Returns:
         Array of 406 per-cell features
     """
+    # mask = best_cricket_mask(cell_rgb)
+    # cell_masked = apply_mask(cell_rgb, mask)
     # ========== COLOR FEATURES (40 total - original 28 + 12 HSV bins) ==========
 
     # 1. RGB Histogram Features (14 features)
-    # rgb_features = extract_rgb_histogram_features(cell_rgb)
+    rgb_features = extract_rgb_histogram_features(cell_rgb)
     rgb_hist_features = extract_rgb_hist_features(cell_rgb)
 
     # 2. HSV Color Features (26 features - PHASE 4A ENHANCED from 14)
     # Now includes 12 fine hue bins for improved red ball detection
     cell_hsv = rgb_to_hsv(cell_rgb)
-    # hsv_features = extract_hsv_color_features(cell_hsv)
-    hsv_hist_features = extract_hsv_hist_color_features(cell_hsv)
+    hsv_features = extract_hsv_color_features(cell_hsv)
+    hsv_hist_features = extract_hsv_hist_color_features(cell_hsv, no_of_bins=8)
+    # hsv_hist_features = extract_hsv_hist_features(cell_hsv, mode="3d", h_bins=16, s_bins=8, v_bins=4)
 
+    lab_color_features = extract_lab_color_features(cell_rgb)
+
+    shape_feats = extract_shape_features(cell_rgb)   # list of floats
     # ========== TEXTURE FEATURES (60 total) ==========
 
     # Convert to grayscale for texture features
     cell_gray = cv2.cvtColor(cell_rgb, cv2.COLOR_BGR2GRAY)
-
     # 3. Local Binary Patterns (16 features - PHASE 4C: 10 original + 6 multi-scale)
     lbp_features = extract_lbp_features(cell_gray)
 
     # 4. Histogram of Oriented Gradients (144 features)
     hog_features = extract_hog_features(cell_gray)
-    # hog_features = na_hog_vector
+    # na_hog_features = na_hog_vector
     # print(hog_features.shape)
+
+    circularity_features = extract_circularity_features(cell_gray)
+    edge_density_features = extract_edge_density_features(cell_gray)
+    # smoothness_features = extract_smoothness_features(cell_gray)
+    polygon_features = extract_polygon_features(cell_gray)
+
 
     # if na_hog_vector is None or len(na_hog_vector) == 0:
     #     raise ValueError("Neighborhood HOG failed: na_hog_vector is empty!")
-    # hog_features = na_hog_vector.astype(np.float32)
+    # na_hog_features = na_hog_vector.astype(np.float32)
 
     # 5. Gabor Filters (20 features)
     # gabor_features = extract_gabor_features(cell_gray)
@@ -225,9 +247,8 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # ])
 
     # Verify we have exactly 406 per-cell features (236 + 65 + 36 + 30 + 20 + 7 + 15)
-    hu_moment_features = extract_hu_moment_features(cell_gray)
+    # hu_moment_features = extract_hu_moment_features(cell_gray)
     # sift_features = extract_sift_features(cell_gray)
-
     # sift_features = extract_sift_features(cell_gray, max_features=5)  # limit to first 5 keypoints
     # orb_features = extract_orb_features(cell_gray, max_features=10)  # limit to first 10 keypoints
 
@@ -235,22 +256,29 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
     # ========== COMBINE ALL FEATURES ==========
     all_features = np.concatenate([
-        # rgb_features,      # 14
+        rgb_features,      # 14
         rgb_hist_features, # 768
-        # hsv_features,      # 14
+        hsv_features,      # 14
         hsv_hist_features, # 768
         lbp_features,      # 10
         hog_features,      # 576
+        # na_hog_features,   # 2700
         # gabor_features,    # 20
         glcm_features,     # 12
-        hu_moment_features, # 7
+        # hu_moment_features, # 7
         # sift_features,      # 640
         #orb_features,      # 320
+
+        lab_color_features, # 3
+        circularity_features, # 1
+        edge_density_features, # 3
+        # smoothness_features, # 1
+        polygon_features,  # 1
 
         # Phase 1 features (65 - includes +11 Shape from Phase 4B)
         enhanced_color_features,  # 18
         shape_features,           # 35 (PHASE 4B: 24 original + 11 enhancements)
-        edge_features,            # 12
+        edge_features,            # 13
 
         # Phase 2 features (36)
         morphological_features,   # 8
@@ -271,7 +299,8 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
         # Phase 4C features (15)
         laws_features,            # 9
-        fourier_features          # 6
+        fourier_features,         # 6
+        shape_features,           # 35
     ])
     # print("SIFT Size:", len(sift_features))
     # print("ORB Size:", len(orb_features))
@@ -281,8 +310,11 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     # assert len(all_features) == 88, f"Expected 88 features, got {len(all_features)}"
     # assert len(all_features) == 842, f"Expected 842 features, got {len(all_features)}"
     # assert len(all_features) == 1605, f"Expected 1605 features, got {len(all_features)}"
-    # assert len(all_features) == 3289, f"Expected 3289 features, got {len(all_features)}" # with normal hog all features
-    assert len(all_features) == 2309, f"Expected 2309 features, got {len(all_features)}" # with normal hog all features
+    # assert len(all_features) == 2176, f"Expected 2176 features, got {len(all_features)}" # remove few features add new feature8/12
+    assert len(all_features) ==  1954, f"Expected  1954 features, got {len(all_features)}" # remove few features add new feature8/12
+    # assert len(all_features) == 2169, f"Expected 2169 features, got {len(all_features)}" # remove few features 8/12
+    # assert len(all_features) == 4445, f"Expected 4445 features, got {len(all_features)}" # with normal hog all features
+    # assert len(all_features) == 3121, f"Expected 3121 features, got {len(all_features)}" # with normal hog all features
     # assert len(all_features) == 2565, f"Expected 2565 features, got {len(all_features)}" # with normal hog
     # assert len(all_features) == 31057, f"Expected 31057 features, got {len(all_features)}" # with na normal hog
     # assert len(all_features) == 17989, f"Expected 17989 features, got {len(all_features)}"
@@ -303,17 +335,27 @@ def get_all_feature_names() -> List[str]:
     """
     all_names = []
 
-
-    # all_names.extend(get_rgb_feature_names())    # 14
+    all_names.extend(get_rgb_feature_names())    # 14
     all_names.extend(get_rgb_hist_feature_names())    # 768
-    # all_names.extend(get_hsv_feature_names())    # 14
-    all_names.extend(get_hsv_hist_feature_names())  # 768
+    all_names.extend(get_hsv_feature_names())    # 14
+    all_names.extend(get_hsv_hist_color_feature_names(no_of_bins=8))  # 768
+    # all_names.extend(get_hsv_hist_feature_names(mode="3d", h_bins=16, s_bins=8, v_bins=4))  # 768
     all_names.extend(get_lbp_feature_names())    # 10
     all_names.extend(get_hog_feature_names())    # 576
-    # all_names.extend(get_na_aware_hog_feature_names())    # 20
+    # all_names.extend(get_na_aware_hog_feature_names(
+    #     orientations=6,
+    #     pixels_per_cell=(16, 16),
+    #     cells_per_block=(1, 1)
+    # ))    # 2700
     # all_names.extend(get_gabor_feature_names())  # 20
     all_names.extend(get_glcm_feature_names())   # 12
-    all_names.extend(get_hu_moment_feature_names())   # 7
+    # all_names.extend(get_hu_moment_feature_names())   # 7
+    all_names.extend(get_lab_color_feature_names())   # 3
+    all_names.extend(get_circularity_feature_names())   # 1
+    all_names.extend(get_edge_density_feature_names())   # 3
+
+    # all_names.extend(get_smoothness_feature_names())   # 1
+    all_names.extend(get_polygon_feature_names())   # 1 # To be removed
     # all_names.extend(get_sift_feature_names(max_features=5))   # 640
     # all_names.extend(get_orb_feature_names(max_features=10))   # 320
     # all_names.extend(get_sift_feature_names())   # 16384
@@ -326,23 +368,24 @@ def get_all_feature_names() -> List[str]:
     # Phase 2 features (36)
     all_names.extend(get_morphological_feature_names())   # 8
     # all_names.extend(get_sift_feature_names())            # 14 abhi
-    all_names.extend(get_enhanced_texture_feature_names()) # 14
+    all_names.extend(get_enhanced_texture_feature_names()) # 14 # To be removed
 
     # Phase 3 features (30)
-    all_names.extend(get_superpixel_feature_names())      # 12
-    all_names.extend(get_haar_feature_names())            # 10
-    all_names.extend(get_advanced_color_moment_names())   # 8
+    all_names.extend(get_superpixel_feature_names())      # 12 # To be removed
+    all_names.extend(get_haar_feature_names())            # 10 # To be removed
+    all_names.extend(get_advanced_color_moment_names())   # 8 # To be removed
 
     # Phase 4A features (20)
     all_names.extend(get_chromaticity_feature_names())    # 14
-    all_names.extend(get_yuv_feature_names())             # 6
+    all_names.extend(get_yuv_feature_names())             # 6 # To be removed
 
     # Phase 4B features (7)
-    all_names.extend(get_hough_feature_names())           # 7
+    all_names.extend(get_hough_feature_names())           # 7 # To be removed
 
     # Phase 4C features (15)
     all_names.extend(get_laws_texture_feature_names())    # 9
-    all_names.extend(get_fourier_texture_feature_names()) # 6
+    all_names.extend(get_fourier_texture_feature_names()) # 6 # To be removed
+    all_names.extend(get_shape_feature_names())           # 35
 
     # all_names.extend(get_spatial_context_feature_names()) # 25
 
@@ -350,8 +393,11 @@ def get_all_feature_names() -> List[str]:
     # assert len(all_names) == 88, f"Expected 88 feature names, got {len(all_names)}"
     # assert len(all_names) == 1605, f"Expected 1605 feature names, got {len(all_names)}"
     # assert len(all_names) == 2245, f"Expected 2245 feature names, got {len(all_names)}"
-    # assert len(all_names) == 3289, f"Expected 3289 features, got {len(all_names)}" # with normal hog all features
-    assert len(all_names) == 2309, f"Expected 2309 features, got {len(all_names)}" # with normal hog all features
+    assert len(all_names) ==  1954, f"Expected  1954 features, got {len(all_names)}" # remove few features add new feature8/12
+    # assert len(all_names) == 2176, f"Expected 2176 features, got {len(all_names)}" # remove few features add new feature8/12
+    # assert len(all_names) == 2169, f"Expected 2169 features, got {len(all_names)}" # remove few features 8/12
+    # assert len(all_names) == 4445, f"Expected 4445 features, got {len(all_names)}" # with normal hog all features
+    # assert len(all_names) == 3121, f"Expected 3121 features, got {len(all_names)}" # with normal hog all features
     # assert len(all_names) == 2565, f"Expected 2565 feature names, got {len(all_names)}" # with normal hog
     # assert len(all_names) == 31057, f"Expected 31057 feature names, got {len(all_names)}" # with na normal hog
     # assert len(all_names) == 17989, f"Expected 17989 feature names, got {len(all_names)}"

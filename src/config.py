@@ -14,7 +14,7 @@ Module-specific constants (used in only one file) should remain in their respect
 PCA_VARIANCE_THRESHOLD = 0.99  # 99% variance retention
 
 # Random seed for reproducibility
-RANDOM_STATE = 42
+RANDOM_STATE = 44
 
 
 # ============================================================================
@@ -58,3 +58,5 @@ CLASS_NO_OBJECT = 0
 CLASS_BALL = 1
 CLASS_BAT = 2
 CLASS_STUMP = 3
+CLASS_OTHER_NO_OBJECT = 4
+
