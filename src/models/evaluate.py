@@ -8,10 +8,13 @@ from pathlib import Path
 from typing import Tuple, Dict
 import pickle
 
+# from src.models.threshold_tuning import X_val
+from threshold_selection import optimize_balanced_thresholds
 
 def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray,
                   class_names: Dict[int, str] = None,
-                  verbose: bool = True) -> Dict:
+                  verbose: bool = True,
+                  output_path: str = "evaluation_results") -> Dict:
     """
     Evaluate trained model on test set.
 
@@ -29,7 +32,7 @@ def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray,
         class_names = {0: 'No Object', 1: 'Ball', 2: 'Bat', 3: 'Stump'}
 
     # Predictions
-    y_pred = model.predict(X_test)
+    # y_pred = model.predict(X_test)
     # y_pred = np.where(y_pred == 4, 0, y_pred)  # Map 'Other No Objects ' to 'No Object'
     # y_test = np.where(y_test == 4, 0, y_test)  # Map 'Other No Objects ' to 'No Object'
     # THRESHOLDS = {
@@ -38,8 +41,34 @@ def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray,
     #     2: 0.30,  # Bat
     #     3: 0.30   # Stump
     # }
-    # probs = model.predict_proba(X_test)
-    # y_pred = []
+    balanced_thresholds = optimize_balanced_thresholds(
+        model,
+        X_test,
+        y_test,
+        class_names,
+        output_dir=output_path + "/balanced_thresholds"
+    )
+
+    print("Balanced thresholds:", balanced_thresholds)
+    probs = model.predict_proba(X_test)
+    y_pred = []
+
+    # Build per-class threshold list in class-id order
+    thresholds = [balanced_thresholds[name] for name in class_names]
+
+    for i in range(len(probs)):
+        p = probs[i]
+        # Default prediction = class with max probability
+        pred_class = np.argmax(p)
+
+        # Apply per-class threshold logic
+        for cls_id in range(len(class_names)):
+            if p[cls_id] >= thresholds[cls_id]:
+                pred_class = cls_id
+
+        y_pred.append(pred_class)
+
+
     # thresholds = [0.50, 0.30, 0.30, 0.30]  # class-wise thresholds
 
     # # final_pred = []

@@ -370,7 +370,7 @@ def main():
             # Save original y_train for report generation
             y_train_original = y_train.copy()
 
-            X_train, y_train, train_df = apply_undersampling(
+            X_train, y_train, train_df, _ = apply_undersampling(
                 X_train, y_train, train_df,
                 strategy=args.undersample_strategy,
                 random_seed=42,
@@ -538,7 +538,7 @@ def main():
             y_validate = np.load(output_dir / 'y_validate.npy')
             print(f"Loaded X_validate: {X_validate.shape}, y_validate: {y_validate.shape}")
 
-        results = evaluate_model(model, X_validate, y_validate, verbose=True)
+        results = evaluate_model(model, X_validate, y_validate, verbose=True, output_path=str(output_dir / 'evaluation_results'))
 
         # Save results
         save_metrics_to_file(results, output_dir / 'metrics.txt')

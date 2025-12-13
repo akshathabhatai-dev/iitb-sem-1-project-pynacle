@@ -46,7 +46,7 @@ def optimize_threshold_single_model(model, X_val, y_val_binary, class_name,
         X_val: Validation features (N, 2343)
         y_val_binary: Binary ground truth (N,)
         class_name: Name of the class ('ball', 'bat', 'stump')
-        metric: Metric to optimize ('f1', 'precision', 'recall', 'accuracy')
+        metric: Metric to optimize ('f1', 'precision', 'recall', 'accuracy', 'balanced')
         threshold_range: List of thresholds to try (default: 0.1 to 0.9 in steps of 0.05)
         verbose: Print optimization progress
 
@@ -76,21 +76,36 @@ def optimize_threshold_single_model(model, X_val, y_val_binary, class_name,
         'accuracy': lambda y_true, y_pred: accuracy_score(y_true, y_pred)
     }
 
-    if metric not in metric_funcs:
+    if metric != 'balanced' and metric not in metric_funcs:
         raise ValueError(f"Unknown metric: {metric}. Choose from {list(metric_funcs.keys())}")
-
-    metric_func = metric_funcs[metric]
+    if metric != 'balanced':
+        metric_func = metric_funcs[metric]
 
     # Try each threshold
     scores = []
     best_score = -1
     best_threshold = 0.5
 
-    for threshold in threshold_range:
-        y_pred = (y_proba >= threshold).astype(int)
-        score = metric_func(y_val_binary, y_pred)
-        scores.append(score)
+    if metric == 'balanced':
+        for threshold in threshold_range:
+            y_pred = (y_proba >= threshold).astype(int)
 
+            precision = precision_score(y_val_binary, y_pred, zero_division=0)
+            recall = recall_score(y_val_binary, y_pred, zero_division=0)
+            f1 = f1_score(y_val_binary, y_pred, zero_division=0)
+
+            # BALANCE SCORE (lower means metrics are closer)
+            balance_err = abs(precision - recall) + abs(precision - f1) + abs(recall - f1)
+            scores.append(balance_err)
+
+            if best_score == -1 or balance_err < best_score:
+                best_score = balance_err
+                best_threshold = threshold
+    else:
+        for threshold in threshold_range:
+            y_pred = (y_proba >= threshold).astype(int)
+            score = metric_func(y_val_binary, y_pred)
+            scores.append(score)
         if score > best_score:
             best_score = score
             best_threshold = threshold
@@ -102,7 +117,13 @@ def optimize_threshold_single_model(model, X_val, y_val_binary, class_name,
 
         # Show performance at default threshold (0.5)
         default_pred = (y_proba >= 0.5).astype(int)
-        default_score = metric_func(y_val_binary, default_pred)
+        if metric == 'balanced':
+            precision = precision_score(y_val_binary, default_pred, zero_division=0)
+            recall = recall_score(y_val_binary, default_pred, zero_division=0)
+            f1 = f1_score(y_val_binary, default_pred, zero_division=0)
+            default_score = abs(precision - recall) + abs(precision - f1) + abs(recall - f1)
+        else:
+            default_score = metric_func(y_val_binary, default_pred)
         improvement = best_score - default_score
 
         print(f"\nComparison to Default (0.5):")

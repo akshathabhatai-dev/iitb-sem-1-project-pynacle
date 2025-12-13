@@ -1198,7 +1198,7 @@ Examples:
     parser.add_argument('--optimize_thresholds', action='store_true',
                        help='Optimize decision thresholds using validation data (improves F1 score)')
     parser.add_argument('--threshold_metric', type=str, default='f1',
-                       choices=['f1', 'precision', 'recall', 'accuracy'],
+                       choices=['f1', 'precision', 'recall', 'accuracy', 'balanced'],
                        help='Metric to optimize when tuning thresholds (default: f1)')
 
     args = parser.parse_args()
