@@ -255,7 +255,7 @@ def apply_undersampling(
         print(f"  Removed: {len(y) - len(y_undersampled):,} samples ({(1 - len(y_undersampled)/len(y))*100:.2f}%)")
         print("="*70)
 
-    return X_undersampled, y_undersampled, df_undersampled
+    return X_undersampled, y_undersampled, df_undersampled , final_indices
 
 
 def image_stratified_undersample(

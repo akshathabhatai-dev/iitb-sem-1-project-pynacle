@@ -498,6 +498,310 @@ python hsv_features.py
 # etc.
 ```
 
+---
+
+# Binary Model Pipeline
+
+An advanced approach using **three separate binary classifiers** to improve minority class detection.
+
+## Overview
+
+The standard multi-class approach sometimes struggles with minority classes (Ball, Bat, Stump). The binary model pipeline addresses this by training three independent classifiers:
+
+1. **Ball vs Rest** (Ball vs Not-Ball)
+2. **Bat vs Rest** (Bat vs Not-Bat)
+3. **Stump vs Rest** (Stump vs Not-Stump)
+
+### Key Improvements
+
+- **Independent threshold tuning** per object type
+- **Aggressive class weighting** optimized for each binary task
+- **Specialized feature importance** per object
+
+## Quick Start
+
+### 1. Label Format (Two Options)
+
+The binary pipeline **auto-detects** label format and works with **BOTH**:
+
+**Option A: Use existing single-label CSV directly (easiest)**
+```bash
+# No conversion needed! The pipeline auto-converts on-the-fly
+python main_pipeline_binary.py --mode full --algorithm both --tune
+```
+
+**Option B: Convert to multi-label CSV first (optional)**
+```bash
+# Convert training labels (only if you want multi-label annotations later)
+python src/data_prep/convert_singlelabel_to_multilabel.py \
+    --input dataset/train/labels/labels.csv \
+    --output dataset/train/labels/labels_multilabel.csv
+
+# Convert test labels
+python src/data_prep/convert_singlelabel_to_multilabel.py \
+    --input dataset/test/labels/labels.csv \
+    --output dataset/test/labels/labels_multilabel.csv
+
+# Then use the multi-label files
+python main_pipeline_binary.py --mode full --algorithm both --tune \
+    --train_labels dataset/train/labels/labels_multilabel.csv \
+    --test_labels dataset/test/labels/labels_multilabel.csv
+```
+
+**Format Auto-Detection:**
+- **Single-label (64 columns):** `c01, c02, ..., c64` → Auto-converts to binary
+- **Multi-label (196 columns):** `c01_ball, c01_bat, c01_stump, ...` → Uses directly
+
+### 2. Train Binary Models
+
+```bash
+# Train both Random Forest and XGBoost binary models
+python main_pipeline_binary.py --mode full --algorithm both --tune
+
+# Train only Random Forest (faster)
+python main_pipeline_binary.py --mode full --algorithm random_forest --tune
+
+# Train only XGBoost
+python main_pipeline_binary.py --mode full --algorithm xgboost --tune
+```
+
+### 3. Compare Models
+
+Compare multi-class vs binary models:
+
+```bash
+python compare_all_models.py
+```
+
+## Binary Pipeline Modes
+
+### Extract Features
+```bash
+python main_pipeline_binary.py --mode extract
+```
+
+**Output:** `outputs/binary_models/X_train.npy`, `outputs/binary_models/y_ball_train.npy`, etc.
+
+### Train Models
+```bash
+# Train with hyperparameter tuning
+python main_pipeline_binary.py --mode train --algorithm both --tune
+
+# Train without tuning (faster)
+python main_pipeline_binary.py --mode train --algorithm random_forest
+```
+
+**Output:** `models/binary_models/binary_{algorithm}_{class}.pkl` (6 models total for both algorithms)
+
+### Evaluate Models
+```bash
+python main_pipeline_binary.py --mode evaluate --algorithm both
+```
+
+**Output:**
+- `outputs/binary_models/{algorithm}/binary_metrics_independent.txt` - Per-binary-model metrics
+- `outputs/binary_models/{algorithm}/binary_metrics_final.txt` - Final multi-class metrics
+- `outputs/binary_models/{algorithm}/binary_confusion_matrices.png` - Visualization
+
+### Predict
+```bash
+python main_pipeline_binary.py --mode predict --algorithm random_forest --visualize
+```
+
+**Output:** `outputs/binary_models/{algorithm}/predictions.csv` + visualizations
+
+### Full Pipeline
+```bash
+python main_pipeline_binary.py --mode full --algorithm both --tune --visualize
+```
+
+Runs all steps: extract → train → evaluate → predict
+
+## Command-Line Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--mode` | Pipeline mode: `extract`, `train`, `evaluate`, `predict`, `full` | Required |
+| `--algorithm` | Algorithm: `random_forest`, `xgboost`, `both` | `random_forest` |
+| `--train_images` | Training images directory | `dataset/train/images` |
+| `--test_images` | Test images directory | `dataset/test/images` |
+| `--train_labels` | Training labels CSV (**auto-detects** single-label or multi-label format) | `dataset/train/labels/labels.csv` |
+| `--test_labels` | Test labels CSV (**auto-detects** format) | `dataset/test/labels/labels.csv` |
+| `--model_dir` | Binary models directory | `models/binary_models` |
+| `--output_dir` | Output directory | `outputs/binary_models` |
+| `--tune` | Enable hyperparameter tuning | Flag (off by default) |
+| `--visualize` | Generate color-coded grids | Flag (off by default) |
+
+## Output Files
+
+After running the binary pipeline:
+
+```
+models/binary_models/
+├── binary_random_forest_ball.pkl
+├── binary_random_forest_bat.pkl
+├── binary_random_forest_stump.pkl
+├── binary_xgboost_ball.pkl
+├── binary_xgboost_bat.pkl
+└── binary_xgboost_stump.pkl
+
+outputs/binary_models/
+├── X_train.npy, y_ball_train.npy, y_bat_train.npy, y_stump_train.npy
+├── X_test.npy, y_ball_test.npy, y_bat_test.npy, y_stump_test.npy
+├── y_train_multiclass.npy, y_test_multiclass.npy
+├── random_forest/
+│   ├── binary_metrics_independent.txt
+│   ├── binary_metrics_final.txt
+│   ├── binary_confusion_matrices.png
+│   ├── binary_confusion_matrix_final.png
+│   └── predictions.csv
+└── xgboost/
+    └── (same structure)
+
+outputs/model_comparison_report.txt  # From compare_all_models.py
+```
+
+## How It Works
+
+### 1. Independent Binary Classification
+
+Each binary classifier focuses on one object type:
+
+```python
+# Ball model learns: "Is this a ball?" (yes/no)
+ball_model.fit(X_train, y_ball_train)
+
+# Bat model learns: "Is this a bat?" (yes/no)
+bat_model.fit(X_train, y_bat_train)
+
+# Stump model learns: "Is this a stump?" (yes/no)
+stump_model.fit(X_train, y_stump_train)
+```
+
+### 2. Aggressive Class Weighting
+
+Each model uses class weights optimized for its imbalance ratio:
+
+- **Ball:** `{0: 1, 1: 50}` - Heaviest weight (rarest class ~5%)
+- **Bat:** `{0: 1, 1: 30}` - Medium weight (~10%)
+- **Stump:** `{0: 1, 1: 25}` - Medium weight (~8%)
+
+### 3. Conflict Resolution
+
+When predicting, each model outputs a probability:
+
+```python
+ball_prob = ball_model.predict_proba(X_test)[:, 1]
+bat_prob = bat_model.predict_proba(X_test)[:, 1]
+stump_prob = stump_model.predict_proba(X_test)[:, 1]
+
+# Apply thresholds
+ball_pred = (ball_prob >= threshold_ball)
+bat_pred = (bat_prob >= threshold_bat)
+stump_pred = (stump_prob >= threshold_stump)
+
+# Resolve conflicts
+if sum(predictions) == 0:
+    final_class = 0  # No Object
+elif sum(predictions) == 1:
+    final_class = single_predicted_class  # 1, 2, or 3
+else:  # Multiple predictions (conflict)
+    final_class = class_with_highest_probability
+```
+
+### 4. Threshold Optimization (Optional)
+
+Fine-tune thresholds on validation set:
+
+```python
+from threshold_tuning import optimize_thresholds_all_models
+
+optimal_thresholds = optimize_thresholds_all_models(
+    models, X_val, y_ball_val, y_bat_val, y_stump_val,
+    metric='f1'
+)
+# Returns: {'ball': 0.6, 'bat': 0.4, 'stump': 0.4}
+```
+
+## Model Comparison
+
+Use `compare_all_models.py` to generate comprehensive comparison:
+
+```bash
+python compare_all_models.py
+```
+
+**Output Report Includes:**
+- Overall metrics (accuracy, F1-macro, F1-weighted)
+- Per-class metrics (precision, recall, F1) for each class
+- Best model recommendations by metric
+- Improvement analysis (binary vs multi-class)
+
+**Example Output:**
+```
+Model                Accuracy    F1-Macro    F1-Weighted
+------------------------------------------------------------
+Multi-Class RF         0.7917      0.4572      0.8418
+Binary RF              0.8250      0.5750      0.8650
+Binary XGBoost         0.8310      0.5920      0.8720
+
+RECOMMENDED MODEL: Binary XGBoost
+  F1-Macro Score: 0.5920
+```
+
+## Advanced: Multi-Label Annotation Tool
+
+For future improvements, annotate cells with multiple objects:
+
+```bash
+python src/data_prep/annotator_multilabel.py \
+    --image_dir dataset/train/images \
+    --output_csv dataset/train/labels/labels_multilabel.csv
+```
+
+**Features:**
+- 3 independent checkboxes per cell (Ball, Bat, Stump)
+- Allows cells with multiple objects (e.g., ball + bat)
+- Saves to 196-column format (64 cells × 3 labels)
+- Color-coded visual feedback
+
+**Controls:**
+- Click cell to select
+- `b` = Toggle Ball (Red highlight)
+- `t` = Toggle Bat (Brown highlight)
+- `s` = Toggle Stump (Yellow highlight)
+- `c` = Clear all labels for cell
+- `d` = Deselect cell
+- `n` = Save and next image
+
+## When to Use Binary Models
+
+**Use Binary Pipeline When:**
+- Multi-class baseline shows poor minority class recall (<60%)
+- Precision on Bat/Stump is very low (<20%)
+- Class imbalance is severe (>85% "No Object")
+- Need fine-grained control over precision-recall tradeoff
+
+**Stick with Multi-Class When:**
+- Baseline already achieves >85% recall on all classes
+- Training time is critical (binary pipeline takes ~2x longer)
+- Simplicity is preferred over maximum accuracy
+
+## Training Time Comparison
+
+| Pipeline | Mode | Time (no tuning) | Time (with tuning) |
+|----------|------|------------------|-------------------|
+| Multi-Class | Full | ~5-10 min | ~30-45 min |
+| Binary (RF only) | Full | ~8-15 min | ~45-70 min |
+| Binary (both) | Full | ~15-25 min | ~90-135 min |
+
+**Hardware:** Times assume modern CPU (8+ cores) and 16GB+ RAM
+
+## Further Reading
+
+- **Design Decision:** See [specs/memory.md](specs/memory.md) for detailed rationale
+- **Label Conversion:** See [specs/CSV_LABEL_CONVERTER.md](specs/CSV_LABEL_CONVERTER.md)
+- **Implementation Details:** See source files in `src/models/binary_*.py`
 
 ---
 
