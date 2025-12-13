@@ -42,7 +42,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import all feature name functions
 from rgb_hist_features import get_rgb_hist_feature_names
-from hsv_hist_features import get_hsv_hist_feature_names
+from hsv_hist_features import get_hsv_hist_color_feature_names as get_hsv_hist_feature_names
 from lbp_features import get_lbp_feature_names
 from hog_features import get_hog_feature_names
 from glcm_features import get_glcm_feature_names
