@@ -107,6 +107,8 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
     Returns:
         Array of 1541 per-cell features
     """
+    # mask = best_cricket_mask(cell_rgb)
+    # cell_masked = apply_mask(cell_rgb, mask)
     # ========== COLOR FEATURES ==========
 
     # 1. RGB Histogram Features
@@ -132,6 +134,9 @@ def extract_features_from_cell(cell_rgb: np.ndarray, na_hog_vector=None) -> np.n
 
     # 4. Histogram of Oriented Gradients
     hog_features = extract_hog_features(cell_gray)
+    # if na_hog_vector is None or len(na_hog_vector) == 0:
+    #     raise ValueError("Neighborhood HOG failed: na_hog_vector is empty!")
+    # na_hog_features = na_hog_vector.astype(np.float32)
 
     circularity_features = extract_circularity_features(cell_gray)
     edge_density_features = extract_edge_density_features(cell_gray)

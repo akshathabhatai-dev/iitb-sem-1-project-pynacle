@@ -294,7 +294,14 @@ def train_random_forest(X: np.ndarray, y: np.ndarray,
             print(f"Best CV F1-macro: {grid_search.best_score_:.4f}")
 
     else:
-
+        # Default parameters
+        # class_weights = {
+        #     0: 1.0,   # NoObject
+        #     1: 5.0,   # Ball
+        #     2: 3.0,   # Bat
+        #     3: 3.0,   # Stump
+        #     4: 1.0    # Other No Objects 
+        # }
         pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -405,6 +412,14 @@ def train_svm(X: np.ndarray, y: np.ndarray,
             print(f"Best CV F1-macro: {grid_search.best_score_:.4f}")
 
     else:
+        # Default parameters
+        # class_weights = {
+        #     0: 1.0,   # NoObject (majority)
+        #     1: 8.0,   # Ball (rarest)
+        #     2: 5.0,   # Bat
+        #     3: 5.0,   # Stump
+        #     4: 1.0    # Other No Objects 
+        # }
         best_pipeline = Pipeline([
             # ('scaler', StandardScaler()),
             # ('pca', PCA(n_components=PCA_VARIANCE_THRESHOLD, random_state=RANDOM_STATE)),
@@ -659,6 +674,219 @@ def tune_thresholds(clf, X_val, y_val, labels_to_tune=[1,2,3]):
         best_thr[c] = best_local[0]
     return best_thr
 
+def get_final_class_weights_for_xgboost(X: np.ndarray, y: np.ndarray) -> Dict[int, float]:
+    """
+    Generate all combinations of class weight multipliers.
+
+    base_classes: list of class labels
+    multipliers_options: list of possible multipliers per class
+
+    Returns list of dicts {class_label: multiplier}
+    """
+    class_weights = {0: 0.25, 1: 11.0, 2: 6.0, 3: 4.3}
+    sample_weights = np.array([class_weights[y_wt] for y_wt in y])
+    from sklearn.feature_selection import VarianceThreshold
+
+    # X: pandas.DataFrame (preferred)
+    if not isinstance(X, pd.DataFrame):
+        X = pd.DataFrame(X)
+
+    # 1.1 remove near-constant features
+    vt = VarianceThreshold(threshold=1e-4)   # tune threshold if needed
+    X_v = pd.DataFrame(vt.fit_transform(X), columns=X.columns[vt.get_support()])
+
+    # 1.2 remove highly correlated features (keep one of each correlated block)
+    corr = X_v.corr().abs()
+    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+    to_drop = [c for c in upper.columns if any(upper[c] > 0.95)]
+    X_v = X_v.drop(columns=to_drop)
+    print("After variance+corr filter:", X_v.shape)
+
+    from sklearn.feature_selection import mutual_info_classif
+
+    mi = mutual_info_classif(X_v.values, y, discrete_features=False, random_state=42)
+    mi_series = pd.Series(mi, index=X_v.columns).sort_values(ascending=False)
+    mi_series.head(20)
+
+    # keep top k by MI or fraction
+    keep_frac = 0.6   # keep top 60% by MI
+    k = max(50, int(len(mi_series) * keep_frac))
+    keep_cols = mi_series.index[:k].tolist()
+    X_f = X_v[keep_cols]
+    print("After MI filter:", X_f.shape)
+
+    model = xgb.XGBClassifier(
+        objective='multi:softprob',
+        num_class=4,
+        n_estimators=800,
+        max_depth=3,
+        learning_rate=0.02,
+        subsample=0.7,
+        colsample_bytree=0.7,
+        gamma=4,
+        min_child_weight=10,
+        max_delta_step=2,
+        eval_metric='mlogloss',
+        tree_method='hist',
+        n_jobs=-1
+    )
+    base_wts = compute_base_class_weights(y)
+    print(base_wts)
+    clf_params = {
+        'objective':'multi:softprob',
+        'num_class':4,
+        'n_estimators':800,
+        'max_depth':3,
+        'learning_rate':0.02,
+        'subsample':0.7,
+        'colsample_bytree':0.7,
+        'gamma':4,
+        'min_child_weight':10,
+        'max_delta_step':2,
+        'eval_metric':'mlogloss',
+        'tree_method':'hist',
+        'use_label_encoder':False,
+        'n_jobs':-1,
+        'random_state':42
+    }
+
+    # create small candidate list (coarse)
+    candidates = [
+        {0:1.0, 1:1.5, 2:1.3, 3:1.1},
+        {0:1.0, 1:2.0, 2:1.5, 3:1.2},
+        {0:1.0, 1:3.0, 2:1.8, 3:1.2},
+        {0:1.0, 1:2.5, 2:1.6, 3:1.3},
+    ]
+
+    results = evaluate_weight_candidates(
+        X, y,
+        classifier_params=clf_params,
+        class_weights_base=base_wts,
+        candidate_multipliers_list=candidates,
+        cv_splits=4,
+        score_metric='macro_f1_no0'
+    )
+
+    print("Candidates sorted (best first):")
+    for mult, mean_score, std in results:
+        print(mult, mean_score, std)
+
+    # choose top multipliers -> final_wts map then fit on full train + early stopping:
+    chosen_mult = results[0][0]   # or whichever you like
+    chosen_mult = {0:1.0, 1:1.5, 2:1.3, 3:1.1}
+    final_class_weights = {c: base_wts[c] * chosen_mult.get(c,1.0) for c in base_wts}
+    sample_weights = sample_weights_from_class_weights(y, final_class_weights)
+    # You can then override/multiply certain classes manually if you want stronger boost:
+    # e.g. increase Ball and Bat a bit:
+    class_multipliers = {0:1.0, 1:2.0, 2:1.5, 3:1.2}
+    final_wts = {c: base_wts[c] * class_multipliers.get(c, 1.0) for c in base_wts}
+    sample_weights = sample_weights_from_class_weights(y, final_wts)
+    print("Final class weights:", final_class_weights)
+    return final_class_weights, X_f, X_v
+
+def get_calibratred_xgboost_model(X_train: np.ndarray, y_train: np.ndarray,
+                                  X_val: np.ndarray, y_val: np.ndarray, model: Pipeline, cv_folds: int) -> Pipeline:
+    final_class_weights, X_f, X_v = get_final_class_weights_for_xgboost(X_train, y_train)
+    # 3.2 Get importances
+    importances = model.get_booster().get_score(importance_type="gain")
+    # map to DataFrame
+    imp_df = pd.Series(importances).sort_values(ascending=False)
+    # Note: get_score returns names like 'f0','f1' if X is array; with DataFrame columns match.
+
+    # 3.3 Select top features automatically with threshold or top_k
+    from sklearn.feature_selection import SelectFromModel
+
+    # Option A: select using threshold (median importance)
+    threshold = np.median(list(importances.values()))
+    sfm = SelectFromModel(model, threshold=threshold, prefit=True)
+    X_s = sfm.transform(X_f)
+    selected_cols = X_f.columns[sfm.get_support()]
+    print("Selected by model:", X_s.shape)
+
+    # Option B: select top N
+    N = 300
+    top_k = imp_df.index[:N].tolist()
+    # if keys are 'f0' etc, map to columns - easier to use feature_importances_ attribute
+    fi = pd.Series(model.feature_importances_, index=X_f.columns).sort_values(ascending=False)
+    top_k_cols = fi.index[:N].tolist()
+    X_s = X_f[top_k_cols]
+    print("Selected top_k:", X_s.shape)
+
+
+    calibrated_model = CalibratedClassifierCV(
+        base_estimator=pipeline,
+        cv="prefit",          # <-- important!
+        method="sigmoid"
+    )
+    xgb_model = xgb.XGBClassifier(
+        n_estimators=300,
+        max_depth=6,
+        min_child_weight=5,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective="multi:softprob",
+        eval_metric="mlogloss",
+        n_jobs=-1,
+    )
+
+    pipeline = Pipeline([
+        ("scaler", StandardScaler()),
+        ("calib", CalibratedClassifierCV(
+            base_estimator=xgb_model,
+            cv=5,
+            method="sigmoid"
+        ))
+    ])
+
+    pipeline = Pipeline([
+        ("scaler", StandardScaler()),
+        ("calib", CalibratedClassifierCV(
+            estimator=xgb.XGBClassifier(
+                n_estimators=300,
+                max_depth=6,
+                min_child_weight=5,
+                gamma=2.0,
+                reg_lambda=1.2,
+                reg_alpha=0.4,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                objective="multi:softprob",
+                eval_metric="mlogloss",
+                random_state=42,
+                n_jobs=-1
+            ),
+            cv=5,
+            method="sigmoid"
+        ))
+    ])
+
+    calibrated_model.fit(X_val, y_val)
+    pipeline.fit(X_train, y_train)
+    best_pipeline = pipeline
+
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
+
+    cv_results_full = cross_validate(
+        best_pipeline, X_v, y_train,
+        cv=cv,
+        scoring=SCORING,
+        # fit_params={"classifier__sample_weight": sample_weights},
+        # return_estimator=True,
+        n_jobs=-1
+    )
+
+    cv_results_sel = cross_validate(
+        best_pipeline, X_s, y_train,
+        cv=cv,
+        scoring=SCORING,
+        # fit_params={"classifier__sample_weight": sample_weights},
+        # return_estimator=True,
+        n_jobs=-1
+    )
+    print("F1 macro, full:", cv_results_full['test_f1_macro'].mean(), " selected:", cv_results_sel['test_f1_macro'].mean())
+
 def train_xgboost(X: np.ndarray, y: np.ndarray,
                  tune_hyperparameters: bool = True,
                  cv_folds: int = 5,
@@ -726,6 +954,23 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
             print(f"Best CV F1-macro: {grid_search.best_score_:.4f}")
 
     else:
+        # class_weights = {
+        #     0: 0.25,
+        #     1: 11.0,
+        #     2: 6.0,
+        #     3: 4.3
+        # }
+        # def compute_sample_weights(y, class_weights, normalize_mean=True):
+        #     # y : numpy array of integer labels
+        #     w = np.array([class_weights[int(c)] for c in y], dtype=float)
+        #     if normalize_mean:
+        #         w = w / w.mean()         # keeps average loss scale stable (recommended)
+        #     return w
+        # sample_weights = compute_sample_weights(y, class_weights, normalize_mean=True)
+        # sample_weights = compute_sample_weights(y, class_weights)
+
+        # final_weights, _, _ = get_final_class_weights_for_xgboost(X, y)
+        # sample_weights = sample_weights_from_class_weights(y, final_weights)
         model = xgb.XGBClassifier(
                 n_estimators=200,
                 max_depth=5,
@@ -738,10 +983,12 @@ def train_xgboost(X: np.ndarray, y: np.ndarray,
                 eval_metric='aucpr'
             )
         pipeline = Pipeline([
+            # ("mi_select", MutualInfoSelector(keep_frac=0.6)),  # <- MI filter inside pipeline
             ("classifier", model)
         ])
 
         pipeline.fit(X, y)
+        # pipeline= get_calibratred_xgboost_model(X, y, X, y, pipeline, cv_folds)
 
        
         best_pipeline = pipeline
