@@ -61,7 +61,7 @@ def load_labels_from_csv(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True, test_data: bool = False, need_augmentation: bool = False):
+def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: bool = True, test_data: bool = False, need_augmentation: bool = False, oversampling_class: str = 'ball', threshold: float = 0.95) -> tuple:
     """
     Extract features and labels from images.
 
@@ -136,110 +136,82 @@ def extract_features_and_labels(images: list, labels_df: pd.DataFrame, verbose: 
             y_list.append(label)
             image_names_list.append(img_name)
             cell_index_list.append(cell_idx)
-    # Create DataFrame for easier analysis
 
-    # feature_columns = (
-    #     [f"rgb_{i}" for i in range(14)] +
-    #     [f"hsv_{i}" for i in range(14)] +
-    #     [f"lbp_{i}" for i in range(10)] +
-    #     [f"hog_{i}" for i in range(576)] +
-    #     [f"gabor_{i}" for i in range(20)] +
-    #     [f"glcm_{i}" for i in range(10)]
-    # )
-    
-    # num_features = len(X_list[0])   # auto-detect feature count
-
-    # feature_columns = [f"f_{i}" for i in range(num_features)]   # auto column names
     if need_augmentation:
         def get_groupwise_max(labels, classes=[1,2,3]):
             counter = Counter(labels)
             vals = [counter.get(cls, 0) for cls in classes]
             return max(vals)
-        # max_count = get_groupwise_max(y_list, classes=[0,1,2,3])
         max_count = get_groupwise_max(y_list, classes=[1,2,3])
         current_ball_count = get_groupwise_max(y_list, classes=[1])
-        # current_bat_count = get_groupwise_max(y_list, classes=[2])
-        # current_stump_count = get_groupwise_max(y_list, classes=[3])
-        # no_of_augumentations_ball = 8
-        # no_of_augumentations_bat = 4
-        # no_of_augumentations_stump = 3
-        min_count = 0.95 * max_count
-        # estimated_ball_count = current_ball_count * no_of_augumentations_ball
-        # estimated_bat_count = current_bat_count * no_of_augumentations_bat
-        # estimated_stump_count = current_stump_count * no_of_augumentations_stump
-        # min_count = min(estimated_ball_count, estimated_bat_count, estimated_stump_count)
+        current_bat_count = get_groupwise_max(y_list, classes=[2])
+        current_stump_count = get_groupwise_max(y_list, classes=[3])
+        min_count = threshold * max_count
         remaining_balls = int(min_count - current_ball_count)
+        remaining_bats = int(min_count - current_bat_count)
+        remaining_stumps = int(min_count - current_stump_count)
         no_of_augumentations_ball = int(np.ceil(remaining_balls/len(all_ball_image_cells)))
-        # remaining_bats = int(min_count - current_bat_count)
-        # remaining_stumps = int(min_count - current_stump_count)
-        # no_of_augumentations_ball = int(np.ceil(remaining_balls/len(all_ball_image_cells)))
-        # no_of_augumentations_bat = int(np.ceil(remaining_bats/len(all_bat_image_cells)))
-        # no_of_augumentations_stump = int(np.ceil(remaining_stumps/len(all_stump_image_cells)))
-        print(f"Current counts - Ball: {current_ball_count}, Max: {0.5*max_count}")
-        # print(f"Current counts - Ball: {current_ball_count}, Bat: {current_bat_count}, Stump: {current_stump_count}, Max: {0.5*max_count}")
-        print(f"Remaining counts - Ball: {remaining_balls}, Max: {0.5*max_count}")
-        # print(f"Remaining counts - Ball: {remaining_balls}, Bat: {remaining_bats}, Stump: {remaining_stumps}, Max: {0.5*max_count}")
-        # print(f"Number Of Augmentations - Ball: {no_of_augumentations_ball}, Bat: {no_of_augumentations_bat}, Stump: {no_of_augumentations_stump}")
-        print("Applying augmented oversampling for Class 1 (ball)...")
-        augmented_ball_cells = []
-
-        # ball_cells, ball_idx, _ = filter_cells_for_augmentation(cells, labels, target_class=1)
-
-        iterator = tqdm(all_ball_image_cells, desc="Suggesting augmentations") if verbose else all_ball_image_cells
-        for cell in iterator:
-            aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_ball-1, class_no=1)
-            augmented_ball_cells.extend(aug_versions)
+        no_of_augumentations_bat = int(np.ceil(remaining_bats/len(all_bat_image_cells)))
+        no_of_augumentations_stump = int(np.ceil(remaining_stumps/len(all_stump_image_cells)))
+        print(f"Current counts - Ball: {current_ball_count}, Max: {threshold*max_count}")
+        print(f"Current counts - Ball: {current_ball_count}, Bat: {current_bat_count}, Stump: {current_stump_count}, Max: {threshold*max_count}")
+        print(f"Remaining counts - Ball: {remaining_balls}, Bat: {remaining_bats}, Stump: {remaining_stumps}, Max: {0.5*max_count}")
+        print(f"Number Of Augmentations - Ball: {no_of_augumentations_ball}, Bat: {no_of_augumentations_bat}, Stump: {no_of_augumentations_stump}")
         
-        print(f"Total ball cells available for augmentation: {len(augmented_ball_cells)}, need to augment: {remaining_balls}")
-        iterator = tqdm(augmented_ball_cells[0:int(remaining_balls)], desc="Extracting Features for augmentations") if verbose else augmented_ball_cells[0:int(remaining_balls)]
-        # for cell_idx, cell in enumerate(augmented_ball_cells):
-        for cell_idx, cell in enumerate(iterator):
-            features = extract_features_from_cell(cell)  # without NA-HOG
-            X_list.append(features)
-            y_list.append(1)  # label is 1 for all augmented ball cells
-            image_names_list.append(generate_random_image_name())
-            cell_index_list.append(-1)  # -1 indicates augmented cell
 
-        # print("Applying augmented oversampling for Class 2 (bat)...")
-        # augmented_bat_cells = []
-        # iterator = tqdm(all_bat_image_cells, desc="Suggesting augmentations") if verbose else all_bat_image_cells
-        # for cell in iterator:
-        #     aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_bat-1, class_no=2)
-        #     augmented_bat_cells.extend(aug_versions)
-        
-        # print(f"Total bat cells available for augmentation: {len(augmented_bat_cells)}, need to augment: {remaining_bats}")
-        # iterator = tqdm(augmented_bat_cells[0: int(remaining_bats)], desc="Extracting Features for augmentations") if verbose else augmented_bat_cells[0:int(remaining_bats)]
-        # # for cell_idx, cell in enumerate(augmented_ball_cells):
-        # for cell_idx, cell in enumerate(iterator):
-        #     features = extract_features_from_cell(cell)  # without NA-HOG
-        #     X_list.append(features)
-        #     y_list.append(2)  # label is 2 for all augmented bat cells
-        #     image_names_list.append(generate_random_image_name())
-        #     cell_index_list.append(-1)  # -1 indicates augmented cell
-        
-        # print("Applying augmented oversampling for Class 3 (stump)...")
-        # augmented_stump_cells = []
-        # # print(f"Total stump cells available for augmentation: {len(all_stump_image_cells)}, need to augment: {remaining_stumps}")
-        # iterator = tqdm(all_stump_image_cells, desc="Suggesting augmentations") if verbose else all_stump_image_cells[0:remaining_stumps]
-        # for cell in iterator:
-        #     aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_stump-1, class_no=3)
-        #     augmented_stump_cells.extend(aug_versions)
-        
-        # print(f"Total stump cells available for augmentation: {len(augmented_stump_cells)}, need to augment: {remaining_stumps}")
-        # iterator = tqdm(augmented_stump_cells[0:int(remaining_stumps)], desc="Extracting Features for augmentations") if verbose else augmented_stump_cells[0:int(remaining_stumps)]
-        # # for cell_idx, cell in enumerate(augmented_ball_cells):
-        # for cell_idx, cell in enumerate(iterator):
-        #     features = extract_features_from_cell(cell)  # without NA-HOG
-        #     X_list.append(features)
-        #     y_list.append(3)  # label is 3 for all augmented stump cells
-        #     image_names_list.append(generate_random_image_name())
-        #     cell_index_list.append(-1)  # -1 indicates augmented cell
-    # label = labels_dict[img_name][cell_idx]
+        if oversampling_class in ['all', 'ball']:
+            print("Applying augmented oversampling for Class 1 (ball)...")
+            augmented_ball_cells = []
+            iterator = tqdm(all_ball_image_cells, desc="Suggesting augmentations") if verbose else all_ball_image_cells
+            for cell in iterator:
+                aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_ball-1, class_no=1)
+                augmented_ball_cells.extend(aug_versions)
+            
+            print(f"Total ball cells available for augmentation: {len(augmented_ball_cells)}, need to augment: {remaining_balls}")
+            iterator = tqdm(augmented_ball_cells[0:int(remaining_balls)], desc="Extracting Features for augmentations") if verbose else augmented_ball_cells[0:int(remaining_balls)]
+            # for cell_idx, cell in enumerate(augmented_ball_cells):
+            for cell_idx, cell in enumerate(iterator):
+                features = extract_features_from_cell(cell)  # without NA-HOG
+                X_list.append(features)
+                y_list.append(1)  # label is 1 for all augmented ball cells
+                image_names_list.append(generate_random_image_name())
+                cell_index_list.append(-1)  # -1 indicates augmented cell
 
-    # X_list.append(features)
-    # y_list.append(label)
-    # image_names_list.append(img_name)
-    # cell_index_list.append(cell_idx)
+        if oversampling_class in ['all', 'bat']:
+            print("Applying augmented oversampling for Class 2 (bat)...")
+            augmented_bat_cells = []
+            iterator = tqdm(all_bat_image_cells, desc="Suggesting augmentations") if verbose else all_bat_image_cells
+            for cell in iterator:
+                aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_bat-1, class_no=2)
+                augmented_bat_cells.extend(aug_versions)
+            
+            print(f"Total bat cells available for augmentation: {len(augmented_bat_cells)}, need to augment: {remaining_bats}")
+            iterator = tqdm(augmented_bat_cells[0: int(remaining_bats)], desc="Extracting Features for augmentations") if verbose else augmented_bat_cells[0:int(remaining_bats)]
+            for cell_idx, cell in enumerate(iterator):
+                features = extract_features_from_cell(cell)  # without NA-HOG
+                X_list.append(features)
+                y_list.append(2)  # label is 2 for all augmented bat cells
+                image_names_list.append(generate_random_image_name())
+                cell_index_list.append(-1)  # -1 indicates augmented cell
+        
+        if oversampling_class in ['all', 'stump']:
+            print("Applying augmented oversampling for Class 3 (stump)...")
+            augmented_stump_cells = []
+            # print(f"Total stump cells available for augmentation: {len(all_stump_image_cells)}, need to augment: {remaining_stumps}")
+            iterator = tqdm(all_stump_image_cells, desc="Suggesting augmentations") if verbose else all_stump_image_cells[0:remaining_stumps]
+            for cell in iterator:
+                aug_versions = generate_augmented_cells(cell, num_augmented=no_of_augumentations_stump-1, class_no=3)
+                augmented_stump_cells.extend(aug_versions)
+            
+            print(f"Total stump cells available for augmentation: {len(augmented_stump_cells)}, need to augment: {remaining_stumps}")
+            iterator = tqdm(augmented_stump_cells[0:int(remaining_stumps)], desc="Extracting Features for augmentations") if verbose else augmented_stump_cells[0:int(remaining_stumps)]
+            # for cell_idx, cell in enumerate(augmented_ball_cells):
+            for cell_idx, cell in enumerate(iterator):
+                features = extract_features_from_cell(cell)  # without NA-HOG
+                X_list.append(features)
+                y_list.append(3)  # label is 3 for all augmented stump cells
+                image_names_list.append(generate_random_image_name())
+                cell_index_list.append(-1)  # -1 indicates augmented cell
 
     feature_columns = get_all_feature_names()
 
@@ -367,7 +339,6 @@ def mode_eda(args):
     print(f"EDA reports generated successfully at: {eda_output_dir}")
     print(f"{'='*70}\n")
 
-
 def main():
     """Main pipeline execution."""
     import argparse
@@ -413,6 +384,10 @@ def main():
                        choices=['image_stratified', 'random'],
                        default='image_stratified',
                        help='Undersampling strategy: image_stratified (recommended) or random (default: image_stratified)')
+    parser.add_argument('--oversampling_class', type=str,
+                       choices=['ball', 'bat', 'stump', 'all'],
+                       default='ball',
+                       help='Class to oversample after undersampling (default: ball)')
 
     args = parser.parse_args()
 
@@ -437,7 +412,7 @@ def main():
         print(f"Found {len(train_images)} training images")
 
         # Extract features
-        X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df, need_augmentation=args.augment)
+        X_train, y_train, _, train_df = extract_features_and_labels(train_images, train_labels_df, need_augmentation=args.augment, oversampling_class=args.oversampling_class, threshold=0.95)
 
         print(f"Extracted features: X_train shape = {X_train.shape}")
         print(f"Labels: y_train shape = {y_train.shape}")
@@ -487,7 +462,6 @@ def main():
 
 
                 # Save original y_train for report generation
-                # y_train_original = y_train.copy()
                 X_train, y_train, _ = apply_oversampling(
                     X_train, y_train, train_df,
                     target_count_ratio=0.95,
