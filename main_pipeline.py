@@ -283,6 +283,45 @@ def select_balanced_data(X_train, y_train, under_sample_size=1500, over_sample_s
 
     return X_final, y_final
 
+def bar_plot_after_sampling(y_before, y_after, y_final, save_path):
+    """Plot class distribution before and after sampling."""
+    import matplotlib.pyplot as plt
+
+    counter_before = Counter(y_before)
+    counter_after = Counter(y_after)
+    counter_final = Counter(y_final)
+
+    classes = sorted(counter_before.keys())
+    counts_before = [counter_before[c] for c in classes]
+    counts_after = [counter_after[c] for c in classes]
+    counts_final = [counter_final[c] for c in classes]
+
+    x = np.arange(len(classes))
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars1 = ax.bar(x - width, counts_before, width, label='Before Sampling')
+    bars2 = ax.bar(x, counts_after, width, label='After Under Sampling')
+    bars3 = ax.bar(x + width, counts_final, width, label='After Oversampling')
+
+    ax.set_xlabel('Class')
+    ax.set_ylabel('Count')
+    ax.set_title('Class Distribution Before and After Sampling')
+    ax.set_xticks(x)
+    ax.set_xticklabels(classes)
+    ax.legend()
+
+    for bar in bars1 + bars2 + bars3:
+        height = bar.get_height()
+        ax.annotate(f'{height}',
+                    xy=(bar.get_x() + bar.get_width() / 3, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom')
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
 
 def main():
     """Main pipeline execution."""
@@ -366,6 +405,8 @@ def main():
             print("\n" + "-"*70)
             print("UNDERSAMPLING CLASS 0 (NO OBJECT)")
             print("-"*70)
+            original_counts = Counter(y_train)
+            print(f"Original class distribution: {original_counts}")
 
             # Save original y_train for report generation
             y_train_original = y_train.copy()
@@ -376,6 +417,8 @@ def main():
                 random_seed=42,
                 verbose=True
             )
+            after_undersample_counts = Counter(y_train)
+            print(f"After undersampling class distribution: {after_undersample_counts}")
 
             print(f"\nAfter undersampling: X_train shape = {X_train.shape}")
             print(f"After undersampling: y_train shape = {y_train.shape}")
@@ -397,6 +440,7 @@ def main():
                 print("OVERSAMPLING CLASS 1 (BALL)")
                 print("-"*70)
 
+
                 # Save original y_train for report generation
                 # y_train_original = y_train.copy()
                 X_train, y_train, _ = apply_oversampling(
@@ -414,6 +458,7 @@ def main():
                 report.to_csv(output_dir / 'oversampling_report.csv', index=False)
                 print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
                 print("-"*70)
+                bar_plot_after_sampling(y_train_original, after_undersample_counts, y_train, output_dir / 'sampling_comparison.png')
 
         # Save features
         # train_df.to_csv(output_dir / 'train_features.csv', index=False)
@@ -546,7 +591,7 @@ def main():
                             save_path=output_dir / 'confusion_matrix.png')
 
     # PREDICT MODE
-    if False and args.mode in ['full', 'predict']:
+    if args.mode in ['full', 'predict']:
         print("\n[4/4] GENERATING PREDICTIONS")
         print("-"*70)
 
