@@ -22,6 +22,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'features'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
+from project_eda import run_eda_pipeline
+
 from grid_utils import divide_into_grid, validate_image_size, resize_image
 from feature_extractor import extract_features_from_cell, get_all_feature_names, compute_hog_per_cell, extract_na_aware_hog_for_grid_features
 # from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features
@@ -283,13 +285,95 @@ def select_balanced_data(X_train, y_train, under_sample_size=1500, over_sample_s
 
     return X_final, y_final
 
+def bar_plot_after_sampling(y_before, y_after, y_final, save_path):
+    """Plot class distribution before and after sampling."""
+    import matplotlib.pyplot as plt
+
+    counter_before = Counter(y_before)
+    counter_after = Counter(y_after)
+    counter_final = Counter(y_final)
+
+    classes = sorted(counter_before.keys())
+    counts_before = [counter_before[c] for c in classes]
+    counts_after = [counter_after[c] for c in classes]
+    counts_final = [counter_final[c] for c in classes]
+
+    x = np.arange(len(classes))
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars1 = ax.bar(x - width, counts_before, width, label='Before Sampling')
+    bars2 = ax.bar(x, counts_after, width, label='After Under Sampling')
+    bars3 = ax.bar(x + width, counts_final, width, label='After Oversampling')
+
+    ax.set_xlabel('Class')
+    ax.set_ylabel('Count')
+    ax.set_title('Class Distribution Before and After Sampling')
+    ax.set_xticks(x)
+    ax.set_xticklabels(classes)
+    ax.legend()
+
+    for bar in bars1 + bars2 + bars3:
+        height = bar.get_height()
+        ax.annotate(f'{height}',
+                    xy=(bar.get_x() + bar.get_width() / 3, height),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha='center', va='bottom')
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+
+def mode_eda(args):
+    """Generate EDA reports on extracted features."""
+    print(f"\n{'='*70}")
+    print(f"MODE: EDA - Generating Exploratory Data Analysis Reports")
+    print(f"{'='*70}\n")
+
+    output_dir = Path(args.output_dir)
+
+    # Check if features exist
+    train_features_path = output_dir / 'train_features.csv'
+    validate_features_path = output_dir / 'validate_features.csv'
+
+    if not train_features_path.exists():
+        print(f"ERROR: Training features not found at {train_features_path}")
+        print("Please run: python main_pipeline.py --mode extract")
+        return
+
+    if not validate_features_path.exists():
+        print(f"ERROR: Validation features not found at {validate_features_path}")
+        print("Please run: python main_pipeline.py --mode extract")
+        return
+
+    # Create EDA output directory
+    eda_output_dir = output_dir / 'eda_reports'
+    eda_output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Running EDA analysis...")
+    print(f"  Train features: {train_features_path}")
+    print(f"  Validate features: {validate_features_path}")
+    print(f"  Output directory: {eda_output_dir}\n")
+
+    # Call EDA function directly (imported at top of file)
+    run_eda_pipeline(
+        train_csv=str(train_features_path),
+        test_csv=str(validate_features_path),
+        output_dir=str(eda_output_dir)
+    )
+
+    print(f"\n{'='*70}")
+    print(f"EDA reports generated successfully at: {eda_output_dir}")
+    print(f"{'='*70}\n")
+
 
 def main():
     """Main pipeline execution."""
     import argparse
 
     parser = argparse.ArgumentParser(description='Cricket Object Detection Pipeline')
-    parser.add_argument('--mode', type=str, choices=['extract', 'train', 'evaluate', 'predict', 'full'],
+    parser.add_argument('--mode', type=str, choices=['extract', 'train', 'evaluate', 'predict', 'eda', 'full'],
                        required=True, help='Pipeline mode')
     parser.add_argument('--model', type=str, choices=['xgboost', 'random_forest'], 
                        help='Model type to use')
@@ -366,6 +450,8 @@ def main():
             print("\n" + "-"*70)
             print("UNDERSAMPLING CLASS 0 (NO OBJECT)")
             print("-"*70)
+            original_counts = Counter(y_train)
+            print(f"Original class distribution: {original_counts}")
 
             # Save original y_train for report generation
             y_train_original = y_train.copy()
@@ -376,6 +462,8 @@ def main():
                 random_seed=42,
                 verbose=True
             )
+            after_undersample_counts = Counter(y_train)
+            print(f"After undersampling class distribution: {after_undersample_counts}")
 
             print(f"\nAfter undersampling: X_train shape = {X_train.shape}")
             print(f"After undersampling: y_train shape = {y_train.shape}")
@@ -397,6 +485,7 @@ def main():
                 print("OVERSAMPLING CLASS 1 (BALL)")
                 print("-"*70)
 
+
                 # Save original y_train for report generation
                 # y_train_original = y_train.copy()
                 X_train, y_train, _ = apply_oversampling(
@@ -414,6 +503,7 @@ def main():
                 report.to_csv(output_dir / 'oversampling_report.csv', index=False)
                 print(f"\nOversampling report saved to {output_dir / 'oversampling_report.csv'}")
                 print("-"*70)
+                bar_plot_after_sampling(y_train_original, after_undersample_counts, y_train, output_dir / 'sampling_comparison.png')
 
         # Save features
         # train_df.to_csv(output_dir / 'train_features.csv', index=False)
@@ -454,6 +544,10 @@ def main():
             np.save(output_dir / 'y_validate.npy', y_validate)
             validate_df.to_csv(output_dir / 'validate_features.csv', index=False)
             print(f"Saved validation features to {output_dir}")
+
+    # EDA in FULL MODE (runs automatically)
+    if args.mode == 'full':
+        mode_eda(args)
 
     # Load features if not in extract mode
     if args.mode in ['train', 'evaluate', 'full']:
@@ -546,7 +640,7 @@ def main():
                             save_path=output_dir / 'confusion_matrix.png')
 
     # PREDICT MODE
-    if False and args.mode in ['full', 'predict']:
+    if args.mode in ['full', 'predict']:
         print("\n[4/4] GENERATING PREDICTIONS")
         print("-"*70)
 
@@ -586,6 +680,11 @@ def main():
                     print(f"  Test: {test_count} images -> {output_dir}/test/visualizations/")
                 if validate_count > 0:
                     print(f"  Validate: {validate_count} images -> {output_dir}/validate/visualizations/")
+
+    # EDA MODE
+    if args.mode == 'eda':
+        mode_eda(args)
+
     print("\n" + "="*70)
     print("PIPELINE COMPLETE!")
     print("="*70)

@@ -43,7 +43,26 @@ def predict_on_image(model, image: np.ndarray, verbose: bool = False) -> np.ndar
     X_cells = np.array(cell_features, dtype=np.float32)  # Shape: (64, 88)
 
     # Predict for all cells
-    y_pred = model.predict(X_cells)  # Shape: (64,)
+    # y_pred = model.predict(X_cells)  # Shape: (64,)
+    y_pred = []
+    probs = model.predict_proba(X_cells)  # Shape: (64, num_classes
+    balanced_thresholds = {0: 0.04447236180904523, 1: 0.46798994974874375, 2: 0.47291457286432165, 3: 0.4827638190954774}
+    class_names = [0, 1, 2, 3]
+
+    # Build per-class threshold list in class-id order
+    thresholds = [balanced_thresholds[name] for name in class_names]
+
+    for i in range(len(probs)):
+        p = probs[i]
+        # Default prediction = class with max probability
+        pred_class = np.argmax(p)
+
+        # Apply per-class threshold logic
+        for cls_id in range(len(class_names)):
+            if p[cls_id] >= thresholds[cls_id]:
+                pred_class = cls_id
+
+        y_pred.append(pred_class)
 
     return y_pred
 
