@@ -1,5 +1,6 @@
 import os
 import math
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -972,26 +973,20 @@ def evaluate_models_on_standardized(
 # 7. MAIN PIPELINE
 # ============================================================
 
-def main():
+def run_eda_pipeline(train_csv, test_csv, output_dir):
     """
-    Unified EDA pipeline.
+    Run complete EDA pipeline on extracted features.
 
-    Assumes you have:
-      - train_features.csv
-      - test_features.csv
-    in the project root (same folder where you run the script).
+    Args:
+        train_csv: Path to training features CSV
+        test_csv: Path to test/validation features CSV
+        output_dir: Directory for EDA outputs
     """
-    root = Path(".")
-    train_csv = root / "train_features.csv"
-    test_csv = root / "test_features.csv"
-    output_dir = "eda_reports"
-
     print(f"Loading train from: {train_csv}")
     print(f"Loading test  from: {test_csv}")
 
-    df_raw = pd.read_csv("outputs/train_features.csv")
-    df_test = pd.read_csv("outputs/test_features.csv")
-
+    df_raw = pd.read_csv(train_csv)
+    df_test = pd.read_csv(test_csv)
 
     # 1) Missing + duplicates
     df_no_missing = check_missing_data(df_raw)
@@ -1009,9 +1004,10 @@ def main():
     print_class_distribution(df_balanced)
 
     # 4) Visuals on balanced data
-    generate_feature_histograms(df_balanced, output_dir="eda_reports_bal")
-    generate_feature_boxplots(df_balanced, output_dir="eda_reports_bal")
-    generate_r2_correlation_heatmap(df_balanced, output_dir="eda_reports_bal")
+    balanced_output_dir = f"{output_dir}_bal"
+    generate_feature_histograms(df_balanced, output_dir=balanced_output_dir)
+    generate_feature_boxplots(df_balanced, output_dir=balanced_output_dir)
+    generate_r2_correlation_heatmap(df_balanced, output_dir=balanced_output_dir)
 
     # 5) Standardize balanced train
     std_result = standardize_features(df_balanced)
@@ -1068,6 +1064,29 @@ def main():
         label_col="label",
         metrics_excel_file="nonpca_model_metrics_summary.xlsx",
         big_plot_file="nonpca_model_boundaries_and_roc.png"
+    )
+
+
+def main():
+    """Main entry point for command-line usage."""
+    parser = argparse.ArgumentParser(description='EDA for Cricket Object Detection Features')
+    parser.add_argument('--train_features', type=str,
+                       default='outputs/train_features.csv',
+                       help='Path to training features CSV')
+    parser.add_argument('--validate_features', type=str,
+                       default='outputs/validate_features.csv',
+                       help='Path to validation features CSV')
+    parser.add_argument('--output_dir', type=str,
+                       default='eda_reports',
+                       help='Directory for EDA outputs')
+
+    args = parser.parse_args()
+
+    # Call the extracted pipeline function
+    run_eda_pipeline(
+        train_csv=args.train_features,
+        test_csv=args.validate_features,
+        output_dir=args.output_dir
     )
 
 

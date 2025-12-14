@@ -22,6 +22,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'features'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'data_prep'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'models'))
 
+from project_eda import run_eda_pipeline
+
 from grid_utils import divide_into_grid, validate_image_size, resize_image
 from feature_extractor import extract_features_from_cell, get_all_feature_names, compute_hog_per_cell, extract_na_aware_hog_for_grid_features
 # from neighborhood_hog_features import compute_hog_per_cell, extract_na_aware_hog_for_grid_features
@@ -284,12 +286,55 @@ def select_balanced_data(X_train, y_train, under_sample_size=1500, over_sample_s
     return X_final, y_final
 
 
+def mode_eda(args):
+    """Generate EDA reports on extracted features."""
+    print(f"\n{'='*70}")
+    print(f"MODE: EDA - Generating Exploratory Data Analysis Reports")
+    print(f"{'='*70}\n")
+
+    output_dir = Path(args.output_dir)
+
+    # Check if features exist
+    train_features_path = output_dir / 'train_features.csv'
+    validate_features_path = output_dir / 'validate_features.csv'
+
+    if not train_features_path.exists():
+        print(f"ERROR: Training features not found at {train_features_path}")
+        print("Please run: python main_pipeline.py --mode extract")
+        return
+
+    if not validate_features_path.exists():
+        print(f"ERROR: Validation features not found at {validate_features_path}")
+        print("Please run: python main_pipeline.py --mode extract")
+        return
+
+    # Create EDA output directory
+    eda_output_dir = output_dir / 'eda_reports'
+    eda_output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Running EDA analysis...")
+    print(f"  Train features: {train_features_path}")
+    print(f"  Validate features: {validate_features_path}")
+    print(f"  Output directory: {eda_output_dir}\n")
+
+    # Call EDA function directly (imported at top of file)
+    run_eda_pipeline(
+        train_csv=str(train_features_path),
+        test_csv=str(validate_features_path),
+        output_dir=str(eda_output_dir)
+    )
+
+    print(f"\n{'='*70}")
+    print(f"EDA reports generated successfully at: {eda_output_dir}")
+    print(f"{'='*70}\n")
+
+
 def main():
     """Main pipeline execution."""
     import argparse
 
     parser = argparse.ArgumentParser(description='Cricket Object Detection Pipeline')
-    parser.add_argument('--mode', type=str, choices=['extract', 'train', 'evaluate', 'predict', 'full'],
+    parser.add_argument('--mode', type=str, choices=['extract', 'train', 'evaluate', 'predict', 'eda', 'full'],
                        required=True, help='Pipeline mode')
     parser.add_argument('--model', type=str, choices=['xgboost', 'random_forest'], 
                        help='Model type to use')
@@ -455,6 +500,10 @@ def main():
             validate_df.to_csv(output_dir / 'validate_features.csv', index=False)
             print(f"Saved validation features to {output_dir}")
 
+    # EDA in FULL MODE (runs automatically)
+    if args.mode == 'full':
+        mode_eda(args)
+
     # Load features if not in extract mode
     if args.mode in ['train', 'evaluate', 'full']:
         if args.mode != 'full':
@@ -586,6 +635,11 @@ def main():
                     print(f"  Test: {test_count} images -> {output_dir}/test/visualizations/")
                 if validate_count > 0:
                     print(f"  Validate: {validate_count} images -> {output_dir}/validate/visualizations/")
+
+    # EDA MODE
+    if args.mode == 'eda':
+        mode_eda(args)
+
     print("\n" + "="*70)
     print("PIPELINE COMPLETE!")
     print("="*70)

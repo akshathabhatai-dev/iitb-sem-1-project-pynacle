@@ -203,7 +203,7 @@ python main_pipeline.py \
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--mode` | Pipeline mode: `extract`, `train`, `evaluate`, `predict`, `full` | Required |
+| `--mode` | Pipeline mode: `extract`, `train`, `evaluate`, `predict`, `eda`, `full` (Note: `full` mode automatically runs EDA) | Required |
 | `--train_images` | Training images directory | `dataset/train/images` |
 | `--test_images` | Test images directory | `dataset/test/images` |
 | `--train_labels` | Training labels CSV | `dataset/train/labels/labels.csv` |
@@ -802,6 +802,349 @@ python src/data_prep/annotator_multilabel.py \
 - **Design Decision:** See [specs/memory.md](specs/memory.md) for detailed rationale
 - **Label Conversion:** See [specs/CSV_LABEL_CONVERTER.md](specs/CSV_LABEL_CONVERTER.md)
 - **Implementation Details:** See source files in `src/models/binary_*.py`
+
+---
+
+# Exploratory Data Analysis (EDA)
+
+The project includes comprehensive EDA tools to analyze extracted features, visualize distributions, detect patterns, and evaluate multiple model configurations.
+
+## Overview
+
+The EDA pipeline provides:
+- **Data quality checks** (missing values, duplicates)
+- **Descriptive statistics** (Excel reports)
+- **Distribution visualizations** (histograms, boxplots)
+- **Correlation analysis** (R² heatmap)
+- **Class balancing** (undersampling analysis)
+- **Dimensionality reduction** (PCA with variance plots)
+- **Model evaluation** (16 different model configurations with ROC curves and decision boundaries)
+
+## Quick Start
+
+### Standalone EDA Script
+
+Run EDA on pre-extracted features:
+
+```bash
+# Default paths
+python src/data_prep/project_eda.py
+
+# Custom paths
+python src/data_prep/project_eda.py \
+    --train_features outputs/train_features.csv \
+    --validate_features outputs/validate_features.csv \
+    --output_dir eda_reports
+```
+
+### Integrated with Main Pipeline
+
+Run EDA as part of the main pipeline:
+
+```bash
+# Run full pipeline (EDA runs automatically after feature extraction)
+python main_pipeline.py --mode full
+
+# Run EDA only (requires pre-extracted features)
+python main_pipeline.py --mode eda
+
+# Run extract + EDA (no training)
+python main_pipeline.py --mode extract
+python main_pipeline.py --mode eda
+```
+
+## EDA Workflow
+
+### 1. Data Quality Checks
+
+**Missing Data Detection:**
+- Reports missing values per column and row
+- Automatically imputes missing numeric values with column mean
+- Skips non-numeric columns
+
+**Duplicate Detection:**
+- Identifies duplicate rows
+- Detects duplicate columns (same data, different names)
+- Reports only (does not remove)
+
+### 2. Descriptive Analysis
+
+Generates Excel spreadsheet (`descriptive_analysis.xlsx`) with:
+- **Numeric features:** count, mean, std, min, 25%, 50%, 75%, max, missing count/percentage, unique values
+- **Categorical features:** count, unique, top, freq, missing count/percentage
+- **Excluded columns:** Lists metadata columns (label, image_name, cell_index)
+
+### 3. Distribution Visualizations
+
+**Feature Histograms** (`feature_histograms.png`):
+- Grid of histograms (8 columns × N rows)
+- 30 bins per histogram
+- Auto-scales for readability
+
+**Feature Boxplots** (`feature_boxplots.png`):
+- Grid of boxplots (8 columns × N rows)
+- Shows outliers and quartiles
+- Helps identify skewed distributions
+
+**Correlation Heatmap** (`feature_correlation_heatmap_r2.png`):
+- R² correlation matrix (squared Pearson correlation)
+- Color-coded heatmap with values
+- Identifies highly correlated feature pairs
+
+### 4. Class Balance Analysis
+
+**Original Distribution:**
+- Prints class counts and percentages
+- Visualizes class imbalance
+
+**Undersampling:**
+- Reduces majority class (class 0) to 2000 samples
+- Preserves all minority class samples
+- Generates balanced visualizations in separate directory (`eda_reports_bal/`)
+
+**Balanced Distribution:**
+- Shows improved class balance
+- Compares before/after statistics
+
+### 5. Feature Standardization
+
+**Z-Score Normalization:**
+- Standardizes all numeric features (mean=0, std=1)
+- Required for PCA and distance-based models
+- Preserves feature relationships
+
+### 6. Principal Component Analysis (PCA)
+
+**PCA with 29 Components (default):**
+- Reduces dimensionality while retaining variance
+- Generates comprehensive outputs
+
+**PCA Outputs:**
+- `pca_explained_variance.png` - Scree plot showing variance per component
+- `pca_cumulative_variance.png` - Cumulative variance plot
+- `pca_loadings.csv` - Feature loadings for each principal component
+- `pca_transformed.csv` - Transformed data (29 PCs + label)
+- `pca_variance_summary.xlsx` - Excel with variance tables
+
+**Test Set Transformation:**
+- Applies same scaler + PCA from training data
+- Ensures consistent feature space for evaluation
+
+### 7. Model Evaluation (16 Models)
+
+**Model Configurations:**
+- **1 Logistic Regression** (max_iter=1000, multinomial)
+- **4 K-Nearest Neighbors** (k=3, 5, 7, 11)
+- **5 Random Forests** (varying depth and leaf size)
+- **5 Neural Networks** (varying layer configurations)
+
+**Evaluation on PCA Features:**
+- Trains all 16 models on 29 PCA components
+- Generates metrics Excel with per-class precision/recall/F1/AUC
+- Creates visualization with decision boundaries + ROC curves
+
+**Evaluation on Non-PCA Features:**
+- Trains same 16 models on standardized original features
+- Compares performance with/without PCA
+- Helps determine if dimensionality reduction is beneficial
+
+**Outputs:**
+- `model_metrics_summary.xlsx` - PCA evaluation metrics
+- `model_boundaries_and_roc.png` - PCA visualizations (decision boundaries + ROC)
+- `nonpca_model_metrics_summary.xlsx` - Non-PCA evaluation metrics
+- `nonpca_model_boundaries_and_roc.png` - Non-PCA visualizations
+
+## Command-Line Arguments
+
+### Standalone EDA Script
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--train_features` | Path to training features CSV | `outputs/train_features.csv` |
+| `--validate_features` | Path to validation features CSV | `outputs/validate_features.csv` |
+| `--output_dir` | Directory for EDA outputs | `eda_reports` |
+
+### Main Pipeline Integration
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--mode full` | Full pipeline (includes automatic EDA after feature extraction) | Mode option |
+| `--mode eda` | Run EDA only (requires pre-extracted features) | Mode option |
+
+## Output Structure
+
+After running EDA, you'll find:
+
+```
+eda_reports/
+├── descriptive_analysis.xlsx               # Numeric/categorical stats
+├── feature_histograms.png                  # Distribution histograms
+├── feature_boxplots.png                    # Boxplot grid
+├── feature_correlation_heatmap_r2.png      # R² correlation matrix
+├── pca_explained_variance.png              # PCA scree plot
+├── pca_cumulative_variance.png             # Cumulative variance
+├── pca_loadings.csv                        # Feature loadings
+├── pca_transformed.csv                     # PCA-transformed data
+├── pca_variance_summary.xlsx               # PCA variance tables
+├── model_metrics_summary.xlsx              # PCA model evaluation
+├── model_boundaries_and_roc.png            # PCA visualization
+├── nonpca_model_metrics_summary.xlsx       # Non-PCA model evaluation
+├── nonpca_model_boundaries_and_roc.png     # Non-PCA visualization
+└── eda_reports_bal/                        # Balanced data visuals
+    ├── feature_histograms.png
+    ├── feature_boxplots.png
+    └── feature_correlation_heatmap_r2.png
+```
+
+## Usage Examples
+
+### Example 1: Quick EDA on Main Pipeline
+
+```bash
+# Extract features first
+python main_pipeline.py --mode extract
+
+# Run EDA
+python main_pipeline.py --mode eda
+```
+
+### Example 2: Full Pipeline with EDA
+
+```bash
+# Extract → EDA → Train → Evaluate → Predict (EDA runs automatically)
+python main_pipeline.py --mode full --tune
+```
+
+### Example 3: Standalone EDA with Custom Paths
+
+```bash
+python src/data_prep/project_eda.py \
+    --train_features outputs/train_features.csv \
+    --validate_features outputs/validate_features.csv \
+    --output_dir eda_reports_custom
+```
+
+### Example 4: EDA on Binary Model Features
+
+```bash
+# Extract binary features first
+python main_pipeline_binary.py --mode extract --algorithm ball
+
+# Run standalone EDA on binary features
+python src/data_prep/project_eda.py \
+    --train_features outputs/binary_models/train_ball_features.csv \
+    --validate_features outputs/binary_models/validate_ball_features.csv \
+    --output_dir eda_reports_ball
+```
+
+## Key Insights from EDA
+
+### Feature Analysis
+
+**High-Variance Features:**
+- RGB/HSV histograms show high variability
+- HOG features capture edge information effectively
+- Gabor features detect multi-scale patterns
+
+**Low-Variance Features:**
+- Some GLCM features have limited discriminative power
+- Consider feature selection for dimensionality reduction
+
+### Class Distribution
+
+**Imbalance Issue:**
+- Class 0 (no object) dominates dataset (87%+)
+- Minority classes need aggressive weighting/sampling
+- Justifies binary model approach
+
+### Correlation Insights
+
+**Highly Correlated Features:**
+- RGB channels show expected correlations
+- HSV features partially redundant with RGB
+- PCA effectively reduces redundancy
+
+### PCA Analysis
+
+**Variance Retention:**
+- First 29 components retain ~95% variance
+- Significant dimensionality reduction (2343→29)
+- Faster training with minimal information loss
+
+### Model Performance
+
+**Best Configurations:**
+- Random Forest depth=20 shows best validation performance
+- Neural networks (2-3 layers) competitive with RF
+- KNN struggles with high dimensionality (improves with PCA)
+
+## When to Use EDA
+
+**Use EDA When:**
+- Starting new modeling approach (understand data first)
+- Debugging poor model performance (check distributions)
+- Comparing feature sets (ball vs bat vs stump)
+- Presenting results (visualizations for reports/slides)
+- Deciding on PCA (compare PCA vs non-PCA metrics)
+
+**Skip EDA When:**
+- Running production pipeline (already validated)
+- Time-constrained experiments (EDA adds ~10-15 minutes)
+- Feature extraction unchanged (no new insights expected)
+
+## Performance Considerations
+
+**Runtime:**
+- Data quality checks: ~30 seconds
+- Descriptive analysis: ~1 minute
+- Visualizations: ~2-3 minutes
+- PCA: ~1 minute
+- Model evaluation (16 models): ~8-12 minutes
+- **Total:** ~12-18 minutes for full EDA
+
+**Memory:**
+- Requires loading full CSV into memory
+- ~500MB RAM for ~13,000 samples
+- Consider batching for larger datasets
+
+**Disk Space:**
+- PNG visualizations: ~10-20 MB total
+- Excel/CSV files: ~5-10 MB
+- **Total:** ~15-30 MB per EDA run
+
+## Troubleshooting
+
+### Missing CSV Files
+
+```
+ERROR: Training features not found at outputs/binary_models/train_ball_features.csv
+Please run: python main_pipeline_binary.py --mode extract
+```
+
+**Solution:** Run feature extraction first
+
+### Memory Errors
+
+If processing large datasets (>50,000 samples):
+- Reduce PCA components
+- Skip model evaluation section
+- Process features in batches
+
+### Slow Model Evaluation
+
+The 16-model evaluation takes ~10-15 minutes. To speed up:
+- Reduce number of models in `get_classification_models()`
+- Skip non-PCA evaluation
+- Use smaller PCA component count
+
+### Matplotlib Display Issues
+
+If plots don't render or show warnings:
+```bash
+# Use non-interactive backend
+export MPLBACKEND=Agg
+python src/data_prep/project_eda.py
+```
 
 ---
 
