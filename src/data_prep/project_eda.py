@@ -996,7 +996,7 @@ def run_eda_pipeline(train_csv, test_csv, output_dir):
     df_features = generate_descriptive_analysis(df_no_missing, output_dir=output_dir)
     generate_feature_histograms(df_no_missing, output_dir=output_dir)
     generate_feature_boxplots(df_no_missing, output_dir=output_dir)
-    generate_r2_correlation_heatmap(df_no_missing, output_dir=output_dir)
+    # generate_r2_correlation_heatmap(df_no_missing, output_dir=output_dir) # Causes Memory Error for 1500 features
 
     # 3) Class distribution + undersampling majority class 0
     print_class_distribution(df_no_missing)
@@ -1007,7 +1007,7 @@ def run_eda_pipeline(train_csv, test_csv, output_dir):
     balanced_output_dir = f"{output_dir}_bal"
     generate_feature_histograms(df_balanced, output_dir=balanced_output_dir)
     generate_feature_boxplots(df_balanced, output_dir=balanced_output_dir)
-    generate_r2_correlation_heatmap(df_balanced, output_dir=balanced_output_dir)
+    # generate_r2_correlation_heatmap(df_balanced, output_dir=balanced_output_dir)  # Causes Memory Error for 1500 features
 
     # 5) Standardize balanced train
     std_result = standardize_features(df_balanced)

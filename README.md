@@ -1037,81 +1037,6 @@ python src/data_prep/project_eda.py \
     --output_dir eda_reports_ball
 ```
 
-## Key Insights from EDA
-
-### Feature Analysis
-
-**High-Variance Features:**
-- RGB/HSV histograms show high variability
-- HOG features capture edge information effectively
-- Gabor features detect multi-scale patterns
-
-**Low-Variance Features:**
-- Some GLCM features have limited discriminative power
-- Consider feature selection for dimensionality reduction
-
-### Class Distribution
-
-**Imbalance Issue:**
-- Class 0 (no object) dominates dataset (87%+)
-- Minority classes need aggressive weighting/sampling
-- Justifies binary model approach
-
-### Correlation Insights
-
-**Highly Correlated Features:**
-- RGB channels show expected correlations
-- HSV features partially redundant with RGB
-- PCA effectively reduces redundancy
-
-### PCA Analysis
-
-**Variance Retention:**
-- First 29 components retain ~95% variance
-- Significant dimensionality reduction (2343→29)
-- Faster training with minimal information loss
-
-### Model Performance
-
-**Best Configurations:**
-- Random Forest depth=20 shows best validation performance
-- Neural networks (2-3 layers) competitive with RF
-- KNN struggles with high dimensionality (improves with PCA)
-
-## When to Use EDA
-
-**Use EDA When:**
-- Starting new modeling approach (understand data first)
-- Debugging poor model performance (check distributions)
-- Comparing feature sets (ball vs bat vs stump)
-- Presenting results (visualizations for reports/slides)
-- Deciding on PCA (compare PCA vs non-PCA metrics)
-
-**Skip EDA When:**
-- Running production pipeline (already validated)
-- Time-constrained experiments (EDA adds ~10-15 minutes)
-- Feature extraction unchanged (no new insights expected)
-
-## Performance Considerations
-
-**Runtime:**
-- Data quality checks: ~30 seconds
-- Descriptive analysis: ~1 minute
-- Visualizations: ~2-3 minutes
-- PCA: ~1 minute
-- Model evaluation (16 models): ~8-12 minutes
-- **Total:** ~12-18 minutes for full EDA
-
-**Memory:**
-- Requires loading full CSV into memory
-- ~500MB RAM for ~13,000 samples
-- Consider batching for larger datasets
-
-**Disk Space:**
-- PNG visualizations: ~10-20 MB total
-- Excel/CSV files: ~5-10 MB
-- **Total:** ~15-30 MB per EDA run
-
 ## Troubleshooting
 
 ### Missing CSV Files
@@ -1137,14 +1062,6 @@ The 16-model evaluation takes ~10-15 minutes. To speed up:
 - Skip non-PCA evaluation
 - Use smaller PCA component count
 
-### Matplotlib Display Issues
-
-If plots don't render or show warnings:
-```bash
-# Use non-interactive backend
-export MPLBACKEND=Agg
-python src/data_prep/project_eda.py
-```
 
 ---
 
