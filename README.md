@@ -797,12 +797,6 @@ python src/data_prep/annotator_multilabel.py \
 
 **Hardware:** Times assume modern CPU (8+ cores) and 16GB+ RAM
 
-## Further Reading
-
-- **Design Decision:** See [specs/memory.md](specs/memory.md) for detailed rationale
-- **Label Conversion:** See [specs/CSV_LABEL_CONVERTER.md](specs/CSV_LABEL_CONVERTER.md)
-- **Implementation Details:** See source files in `src/models/binary_*.py`
-
 ---
 
 # Exploratory Data Analysis (EDA)
